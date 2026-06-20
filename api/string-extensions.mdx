@@ -1,0 +1,163 @@
+---
+title: "String Generator Extension Methods"
+sidebarTitle: "String Extensions"
+description: "Extension methods on Generator<string> for case conversion, capitalization, and sentence formatting — composable in any generator pipeline."
+---
+
+Forged ships a set of string-specific extension methods that slot directly into any `Generator<string>` pipeline. Each method wraps the upstream generator in a dedicated transformer class — `UppercaseGenerator`, `LowercaseGenerator`, `TitleCaseGenerator`, `CapitalizeGenerator`, and `SentencifyGenerator` — and returns a new `Generator<string>`, so you can continue chaining further modifiers after them.
+
+<Note>
+  These extensions are defined using the **C# 14 `extension` member syntax** inside `StringGeneratorExtensions`. This means your project must target **.NET 10** or later and use the **C# 14** language version. Earlier toolchains will not compile them.
+</Note>
+
+---
+
+## Case conversion
+
+### `.ToUpper()`
+
+Converts every generated string to uppercase using the invariant culture (`string.ToUpperInvariant()`).
+
+**Returns** `Generator<string>`
+
+```csharp
+// Generate a 6-character uppercase identifier
+Code = f => f.Text.Alpha(6).ToUpper(),
+```
+
+---
+
+### `.ToLower()`
+
+Converts every generated string to lowercase using the invariant culture (`string.ToLowerInvariant()`).
+
+**Returns** `Generator<string>`
+
+```csharp
+// Lowercase email local-part
+Email = f => f.Person.FirstName().ToLower()
+    .Refine(name => $"{name}@example.com"),
+```
+
+---
+
+### `.ToTitleCase(CultureInfo? cultureInfo = null)`
+
+Converts every generated string to title case using `TextInfo.ToTitleCase` from the supplied (or forge-default) culture.
+
+<ParamField path="cultureInfo" type="CultureInfo?" required={false}>
+  The culture whose `TextInfo` is used for the conversion. When `null`, falls back to the `Forge` instance's configured locale.
+</ParamField>
+
+**Returns** `Generator<string>`
+
+```csharp
+// "the quick brown fox" → "The Quick Brown Fox"
+BookTitle = f => f.Lorem.Words(4)
+    .Refine(ws => string.Join(' ', ws))
+    .ToTitleCase(),
+```
+
+---
+
+## Capitalization
+
+### `.Capitalize(CultureInfo? cultureInfo = null)`
+
+Uppercases only the **first character** of the generated string, leaving all remaining characters untouched. This is distinct from `.ToTitleCase()`, which uppercases the first letter of every word.
+
+<ParamField path="cultureInfo" type="CultureInfo?" required={false}>
+  The culture to use when uppercasing the first character. When `null`, falls back to the `Forge` instance's configured locale.
+</ParamField>
+
+**Returns** `Generator<string>`
+
+```csharp
+// "alice" → "Alice"
+FirstName = f => f.Text.Pronounceable(1, 3).ToLower().Capitalize(),
+```
+
+---
+
+## Sentence formatting
+
+### `.Sentencify(int sentenceLength, CultureInfo? cultureInfo = null)`
+
+Takes a generated string (treated as a sequence of space-separated words) and formats it as one or more sentences: the first word of each sentence is capitalized and sentences end with a period. Each sentence is exactly `sentenceLength` words long.
+
+<ParamField path="sentenceLength" type="int" required>
+  The fixed number of words per sentence.
+</ParamField>
+
+<ParamField path="cultureInfo" type="CultureInfo?" required={false}>
+  The culture to use for first-letter capitalization. Falls back to the `Forge` locale when `null`.
+</ParamField>
+
+**Returns** `Generator<string>`
+
+```csharp
+// Fixed 6-word sentences
+Bio = f => f.Lorem.Paragraph().Sentencify(6),
+```
+
+---
+
+### `.Sentencify(int minSentenceLength, int maxSentenceLength, CultureInfo? cultureInfo = null)`
+
+Same as the single-length overload, but the number of words per sentence is chosen randomly within the inclusive `[minSentenceLength, maxSentenceLength]` range on each generation call, giving more natural-sounding output.
+
+<ParamField path="minSentenceLength" type="int" required>
+  The minimum number of words per sentence (inclusive).
+</ParamField>
+
+<ParamField path="maxSentenceLength" type="int" required>
+  The maximum number of words per sentence (inclusive).
+</ParamField>
+
+<ParamField path="cultureInfo" type="CultureInfo?" required={false}>
+  The culture to use for first-letter capitalization. Falls back to the `Forge` locale when `null`.
+</ParamField>
+
+**Returns** `Generator<string>`
+
+```csharp
+// Variable-length sentences, between 5 and 12 words each
+Description = f => f.Lorem.Paragraph().Sentencify(5, 12),
+```
+
+---
+
+## Chaining example
+
+All string extension methods return `Generator<string>`, so they can be freely chained with each other and with any other `Generator<T>` modifier:
+
+```csharp
+FirstName = f => f.Text
+    .Pronounceable(1, 3)
+    .ToLower()
+    .Capitalize(),
+```
+
+<CodeGroup>
+
+```csharp Username pipeline
+Username = f => f.Text
+    .Alpha(8)
+    .ToLower()
+    .Refine(s => $"user_{s}"),
+```
+
+```csharp Article headline pipeline
+Headline = f => f.Lorem
+    .Words(5)
+    .Refine(ws => string.Join(' ', ws))
+    .ToTitleCase(),
+```
+
+```csharp Product description pipeline
+Description = f => f.Lorem
+    .Paragraph()
+    .Sentencify(4, 10, CultureInfo.GetCultureInfo("en-GB")),
+```
+
+</CodeGroup>

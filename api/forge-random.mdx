@@ -1,0 +1,247 @@
+---
+title: "ForgeRandom: Picks, Numbers, and Weighted Selection"
+sidebarTitle: "Random"
+description: "ForgeRandom (f.Random) provides generators for random numeric values, item picks from collections, weighted picks, and coin tosses."
+---
+
+`ForgeRandom` is the core randomisation module in Forged, accessible via `f.Random`. It covers the most common random-data patterns: flipping a coin, drawing one or more items from a fixed collection, picking a random enum member, generating a numeric value in a range, and performing probability-weighted selection. Every method returns a `Generator<T>` that is re-evaluated on each call to `Generate()`, so every record in a batch gets independently randomised values.
+
+---
+
+## CoinToss
+
+Simulates a coin flip, producing a uniformly distributed `bool` — `true` for heads, `false` for tails.
+
+```csharp
+public Generator<bool> CoinToss()
+```
+
+<ResponseField name="returns" type="Generator<bool>">
+  Produces `true` or `false` with equal probability on each invocation.
+</ResponseField>
+
+**Example**
+
+```csharp
+IsVerified  = f => f.Random.CoinToss(),
+HasNewsletter = f => f.Random.CoinToss(),
+```
+
+---
+
+## Pick\<T\> — single item
+
+Randomly selects one item from a supplied set of values. Pass the candidates directly as arguments; the method uses a `params` array so no explicit array construction is required.
+
+```csharp
+public Generator<T> Pick<T>(params T[] items)
+```
+
+<ParamField path="items" type="T[]" required={true}>
+  One or more candidate values to choose from. Each call selects a single item
+  uniformly at random.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<T>">
+  Produces one randomly chosen element from `items` on each invocation.
+</ResponseField>
+
+**Example**
+
+```csharp
+Tier     = f => f.Random.Pick("free", "pro", "enterprise"),
+Priority = f => f.Random.Pick(1, 2, 3, 4, 5),
+```
+
+---
+
+## Pick\<T\> — fixed count
+
+Picks exactly `count` items (with replacement) from `items` and returns them as an array.
+
+```csharp
+public Generator<T[]> Pick<T>(T[] items, int count)
+```
+
+<ParamField path="items" type="T[]" required={true}>
+  The source collection to draw from.
+</ParamField>
+
+<ParamField path="count" type="int" required={true}>
+  The exact number of items to include in the returned array.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<T[]>">
+  Produces a `T[]` of length `count` on each invocation.
+</ResponseField>
+
+**Example**
+
+```csharp
+// Always pick exactly 3 tags
+Tags = f => f.Random.Pick(new[] { "csharp", "dotnet", "azure", "api", "testing" }, 3),
+```
+
+---
+
+## Pick\<T\> — variable count
+
+Picks a random number of items between `minCount` and `maxCount` (inclusive) from `items`.
+
+```csharp
+public Generator<T[]> Pick<T>(T[] items, int minCount, int maxCount)
+```
+
+<ParamField path="items" type="T[]" required={true}>
+  The source collection to draw from.
+</ParamField>
+
+<ParamField path="minCount" type="int" required={true}>
+  The minimum number of items to include (inclusive).
+</ParamField>
+
+<ParamField path="maxCount" type="int" required={true}>
+  The maximum number of items to include (inclusive).
+</ParamField>
+
+<ResponseField name="returns" type="Generator<T[]>">
+  Produces a `T[]` whose length varies between `minCount` and `maxCount` on each invocation.
+</ResponseField>
+
+**Example**
+
+```csharp
+// Between 1 and 5 permissions per role
+Permissions = f => f.Random.Pick(
+    new[] { "read", "write", "delete", "admin", "audit" },
+    minCount: 1,
+    maxCount: 5
+),
+```
+
+---
+
+## Pick\<T\> — enum value
+
+Randomly selects one value from a `struct` enum type `T`. The generator caches the enum's values on first use, so there is no repeated reflection cost.
+
+```csharp
+public Generator<T> Pick<T>() where T : struct, Enum
+```
+
+<ResponseField name="returns" type="Generator<T>">
+  Produces a randomly chosen member of the enum `T` on each invocation.
+</ResponseField>
+
+**Example**
+
+```csharp
+Status      = f => f.Random.Pick<OrderStatus>(),
+Environment = f => f.Random.Pick<DeploymentEnvironment>(),
+```
+
+---
+
+## Number\<T\>
+
+Generates a random numeric value within an inclusive `[min, max]` range. The constraint `where T : struct, INumber<T>, IMinMaxValue<T>` means it supports all built-in .NET numeric primitives — `int`, `long`, `float`, `double`, `decimal`, `short`, `byte`, `uint`, and more. When `min` or `max` is omitted the type's `MinValue` / `MaxValue` is used automatically.
+
+```csharp
+public Generator<T> Number<T>(T? min = null, T? max = null)
+    where T : struct, INumber<T>, IMinMaxValue<T>
+```
+
+<ParamField path="min" type="T?" required={false}>
+  The lower bound of the range (inclusive). Defaults to `T.MinValue` when `null`.
+</ParamField>
+
+<ParamField path="max" type="T?" required={false}>
+  The upper bound of the range (inclusive). Defaults to `T.MaxValue` when `null`.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<T>">
+  Produces a random value of type `T` within the specified range on each invocation.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp Integer range
+Age    = f => f.Random.Number<int>(18, 99),
+Rating = f => f.Random.Number<int>(1, 5),
+```
+
+```csharp Decimal / double
+Price     = f => f.Random.Number<decimal>(0.01m, 9999.99m),
+Latitude  = f => f.Random.Number<double>(-90.0, 90.0),
+Longitude = f => f.Random.Number<double>(-180.0, 180.0),
+```
+
+```csharp Unconstrained (full type range)
+RawBytes = f => f.Random.Number<byte>(),
+```
+
+</CodeGroup>
+
+---
+
+## WeightedPick\<T\> — parallel arrays
+
+Picks one item from `items` using probability weights supplied as a parallel `float[]`. Items with higher weights appear more frequently. The weights do not need to sum to 1 — they are normalised internally.
+
+```csharp
+public Generator<T> WeightedPick<T>(T[] items, float[] weights)
+```
+
+<ParamField path="items" type="T[]" required={true}>
+  The candidate values. Must have the same length as `weights`.
+</ParamField>
+
+<ParamField path="weights" type="float[]" required={true}>
+  A weight for each item at the corresponding index. Higher values increase
+  selection probability. Must have the same length as `items`.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<T>">
+  Produces one item from `items` on each invocation, chosen proportionally to its weight.
+</ResponseField>
+
+**Example**
+
+```csharp
+// "active" is 4× more likely than "suspended", "deleted" is rare
+Status = f => f.Random.WeightedPick(
+    items:   new[] { "active", "inactive", "suspended", "deleted" },
+    weights: new[] { 0.70f,    0.20f,      0.08f,       0.02f     }
+),
+```
+
+---
+
+## WeightedPick\<T\> — tuple pairs
+
+An alternative overload that accepts item-weight pairs as a single array of `(T item, float weight)` tuples, keeping each item co-located with its weight for improved readability.
+
+```csharp
+public Generator<T> WeightedPick<T>((T item, float weight)[] items)
+```
+
+<ParamField path="items" type="(T item, float weight)[]" required={true}>
+  An array of tuples where each element pairs a candidate value with its relative
+  weight. Higher weight values increase the probability of that item being selected.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<T>">
+  Produces one item on each invocation, chosen proportionally to its paired weight.
+</ResponseField>
+
+**Example**
+
+```csharp
+Plan = f => f.Random.WeightedPick(new[]
+{
+    ("free",       5.0f),
+    ("pro",        3.0f),
+    ("enterprise", 1.0f),
+    ("trial",      1.5f),
+}),
+```

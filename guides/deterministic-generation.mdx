@@ -1,0 +1,123 @@
+---
+title: "Deterministic Generation with Seeded Random"
+sidebarTitle: "Deterministic Output"
+description: "Pass a seeded Random instance to any Forged faker to produce reproducible datasets — ideal for unit tests, snapshot tests, and debugging."
+---
+
+When you call `faker.Get()` without any special configuration, Forged uses `Random.Shared` under the hood — a thread-safe, non-deterministic random number generator. That is perfect for generating diverse development fixtures, but it means every run produces different data. For unit tests, snapshot tests, or any scenario where you need to assert against specific generated values, you need a way to pin the output. Forged solves this by accepting a seeded `Random` instance directly in the faker constructor, ensuring every property generator in that faker draws from the same, reproducible RNG sequence.
+
+## How It Works
+
+The `Faker<T>` base class constructor has the following signature:
+
+```csharp
+public abstract class Faker<TModel>(Random? random = null, CultureInfo? locale = null)
+```
+
+When you pass a `Random` instance to your faker, it is stored on the `Forge` object that all property generators share. Every call to `.Generate()` on any generator inside that faker consumes the next value from that same seeded sequence, making the entire output of `faker.Get()` fully reproducible.
+
+If `random` is `null` (the default), Forged falls back to `Random.Shared`, which is non-deterministic.
+
+## Unseeded vs. Seeded
+
+<Tabs>
+  <Tab title="Non-Deterministic (default)">
+    ```csharp
+    // Uses Random.Shared — output changes every run
+    var faker = new PersonFaker
+    {
+        Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+        FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+        LastName  = f => f.Text.Pronounceable(1, 3).Capitalize(),
+        IsActive  = f => f.Random.Pick(true, false),
+    };
+
+    var person = faker.Get();
+    // person.FirstName → "Mivoka"   (first run)
+    // person.FirstName → "Relutha"  (second run — different every time)
+    ```
+  </Tab>
+  <Tab title="Deterministic (seeded)">
+    ```csharp
+    // Uses a fixed seed — output is identical on every run
+    var faker = new PersonFaker(new Random(12345))
+    {
+        Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+        FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+        LastName  = f => f.Text.Pronounceable(1, 3).Capitalize(),
+        IsActive  = f => f.Random.Pick(true, false),
+    };
+
+    var person = faker.Get();
+    // person.FirstName → "Tivela"  (every run, same seed, same output)
+    ```
+  </Tab>
+</Tabs>
+
+## Setting a Locale Alongside a Seed
+
+The second constructor parameter, `locale`, controls culture-sensitive formatting (e.g., title casing, date formatting). You can combine both a seed and a locale:
+
+```csharp
+var faker = new PersonFaker(new Random(42), CultureInfo.GetCultureInfo("en-US"))
+{
+    Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+    FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+    LastName  = f => f.Text.Pronounceable(1, 3).Capitalize(),
+    IsActive  = f => f.Random.Pick(true, false),
+};
+```
+
+If `locale` is `null`, Forged uses `CultureInfo.InvariantCulture`.
+
+## Using Seeds in Tests
+
+<Tip>
+  In xUnit, declare your seeded faker in a constructor or a `[Theory]` data source so that every test invocation uses the same, predictable data. In NUnit, place it in a `[SetUp]` method. This pattern eliminates flakiness caused by non-deterministic test data.
+
+  ```csharp
+  // xUnit example
+  public class PersonTests
+  {
+      private readonly PersonFaker _faker = new PersonFaker(new Random(99999))
+      {
+          Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+          FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+          LastName  = f => f.Text.Pronounceable(1, 3).Capitalize(),
+          IsActive  = f => f.Random.Pick(true, false),
+      };
+
+      [Fact]
+      public void FullName_ShouldCombineFirstAndLast()
+      {
+          var person = _faker.Get();
+          // person is always the same — assert freely
+          Assert.NotEmpty(person.FirstName);
+      }
+  }
+  ```
+</Tip>
+
+## Generating Multiple Items
+
+Seeding works identically when generating collections. The RNG state advances through every property of every item in the order they are generated:
+
+```csharp
+var faker = new PersonFaker(new Random(777))
+{
+    Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+    FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+    LastName  = f => f.Text.Pronounceable(1, 3).Capitalize(),
+    IsActive  = f => f.Random.Pick(true, false),
+};
+
+// Produces the same 10 people every run
+var people = faker.Get(10).ToList();
+
+// Variable count (min, max) also supported — count itself is drawn from the seeded RNG
+var subset = faker.Get(3, 7).ToList();
+```
+
+<Warning>
+  Changing the number of properties in your faker configuration, reordering them, or adding new generators alters the sequence of RNG calls — even if you keep the same seed. Any existing snapshot assertions will break and must be re-recorded. Treat your faker configuration as part of the snapshot contract.
+</Warning>

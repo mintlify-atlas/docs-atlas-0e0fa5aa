@@ -1,0 +1,175 @@
+---
+title: "Generators: Building Blocks of Fake Data"
+sidebarTitle: "Generators"
+description: "Every value in Forged is produced by a Generator<T>. Generators are composable, chainable, and can be transformed with fluent modifier methods."
+---
+
+Every piece of fake data in Forged ultimately comes from a `Generator<T>`. Whether you call `f.Text.Guid()`, `f.Random.Number<int>()`, or `f.Person.Username()`, each module method returns a concrete subclass of `Generator<T>`. Generators are designed to be composed: every modifier method returns a new generator that wraps the previous one, forming a small pipeline that is evaluated lazily when `Generate()` is finally called.
+
+## The type hierarchy
+
+```csharp
+// Covariant read-only interface — allows Generator<Derived> to satisfy IGenerator<Base>
+public interface IGenerator<out T>
+{
+    T Generate();
+}
+
+// Abstract base class — all built-in and user generators extend this
+public abstract class Generator<T>(Forge forge) : IGenerator<T>
+{
+    public abstract T Generate();
+    // ... modifier methods
+}
+```
+
+`IGenerator<T>` is covariant (`out T`), which means a `Generator<string>` can be assigned to an `IGenerator<object>`. This is particularly useful for the generated faker properties, which are typed as `IGenerator<T>` so that derived types can be used where base types are expected.
+
+## Implicit conversion to `T`
+
+`Generator<T>` defines an implicit conversion operator that calls `Generate()` behind the scenes:
+
+```csharp
+public static implicit operator T(Generator<T> generator) => generator.Generate();
+```
+
+This lets you use a generator directly in any expression that expects a `T`:
+
+```csharp
+string name = f.Text.Pronounceable(2, 4).Capitalize(); // implicit Generate() call
+int    age  = f.Random.Number<int>(18, 99);             // implicit Generate() call
+```
+
+<Note>
+  The implicit conversion is convenient for quick scripts and demos, but inside faker lambdas you should return the generator itself (not the value) so Forged can cache it and call `Generate()` on every `Get()` invocation.
+</Note>
+
+## The pipeline model
+
+Generators wrap other generators. Each modifier method creates a new generator that holds a reference to its source and adds a transformation layer. None of these layers executes until `Generate()` is called:
+
+```csharp
+f.Text.Pronounceable(1, 3)   // PronounceableStringGenerator
+     .Capitalize()            // CapitalizeGenerator(above)
+     .List(2, 5)              // EnumerableGenerator → Refine<List<T>>(above)
+```
+
+The pipeline above produces a `Generator<List<string>>` that, on each call to `Generate()`, produces 2–5 randomly sized pronounceable words each with its first letter capitalised.
+
+## Core modifier methods
+
+Every `Generator<T>` exposes the following modifier methods regardless of its concrete type:
+
+<Accordion title="OrDefault — introduce nulls with a probability">
+```csharp
+public Generator<T?> OrDefault(float probability)
+```
+Returns `default(T?)` with the given probability (0.0–1.0), otherwise delegates to the source generator. Useful for nullable reference type properties where `null` is a valid value.
+
+```csharp
+// 20% chance of null nickname
+Nickname = f => f.Person.Username().OrDefault(.2f),
+```
+</Accordion>
+
+<Accordion title="Or — substitute an alternative value">
+```csharp
+public Generator<T> Or(T other, float probability)
+```
+Returns `other` with the given probability, otherwise delegates to the source generator. Unlike `OrDefault`, the fallback value is a concrete `T` you supply.
+
+```csharp
+// 10% chance of the literal string "N/A"
+Label = f => f.Text.Alpha(4, 8).Or("N/A", 0.1f),
+```
+</Accordion>
+
+<Accordion title="Refine — transform the generated value">
+```csharp
+public Generator<TNew> Refine<TNew>(Func<T, TNew> refiner)
+```
+Applies a transformation function to every generated value, producing a new generator of type `TNew`. Use `Refine` for any custom mapping that is not covered by a built-in modifier.
+
+```csharp
+// Join a string array into a hyphen-separated slug
+LastName = f => f.Text
+    .Pronounceable(1, 3)
+    .Capitalize()
+    .Array(1, 2)
+    .Refine(items => string.Join("-", items)),
+```
+</Accordion>
+
+<Accordion title="Enumerable / Array / List / HashSet — produce collections">
+```csharp
+public Generator<IEnumerable<T>> Enumerable(int length)
+public Generator<IEnumerable<T>> Enumerable(int minLength, int maxLength)
+
+public Generator<T[]>            Array(int length)
+public Generator<T[]>            Array(int minLength, int maxLength)
+
+public Generator<List<T>>        List(int length)
+public Generator<List<T>>        List(int minLength, int maxLength)
+
+public Generator<HashSet<T>>     HashSet(int length)
+public Generator<HashSet<T>>     HashSet(int minLength, int maxLength)
+```
+Each collection modifier repeatedly invokes `Generate()` on the source to build a collection of the requested size. The range overloads pick a random count between `minLength` and `maxLength` on every call.
+
+```csharp
+// 0–3 capitalised middle names
+MiddleNames = f => f.Text.Alpha(3, 5).ToLower().Capitalize().List(0, 3),
+```
+</Accordion>
+
+<Accordion title="Memo — capture and replay a value within one Get() cycle">
+```csharp
+public MemoGenerator<T> Memo(out MemoValueGenerator<T> memoizedValue)
+```
+`Memo` solves the problem of needing to reference a generated value more than once in the same `Get()` call — for example, combining a first name and last name into a full name.
+
+- The method returns a `MemoGenerator<T>`, which behaves exactly like the source generator but stores the last generated value in `CurrentValue`.
+- It also emits a `MemoValueGenerator<T>` via the `out` parameter, which simply replays `CurrentValue` without re-generating.
+
+Because `out var` does not work inside C# object initializers, declare the receivers before the faker:
+
+```csharp
+MemoValueGenerator<string> first = null!;
+MemoValueGenerator<string> last  = null!;
+
+var faker = new PersonFaker
+{
+    FirstName = f => f.Text.Pronounceable(1, 3).Capitalize().Memo(out first),
+    LastName  = f => f.Text.Pronounceable(1, 3).Capitalize().Memo(out last),
+
+    // Runs after FirstName and LastName generators have fired
+    FullName  = f => f.Basic.Func(() => $"{first} {last}"),
+};
+```
+</Accordion>
+
+<Accordion title="Cast — downcast to a derived type">
+```csharp
+public IGenerator<TOut?> Cast<TOut>() where TOut : T
+```
+Generates a value and casts it to the derived type `TOut`. Returns `null` if the cast is not possible.
+</Accordion>
+
+## Chaining modifiers together
+
+Modifiers are fully composable. A realistic pipeline from the demo application combines several of them:
+
+```csharp
+LastName = f => f.Text
+    .Pronounceable(1, 3)                           // Generator<string>
+    .ToLower()                                     // Generator<string>  (lowercase)
+    .Capitalize()                                  // Generator<string>  (Title case)
+    .Array(1, 2)                                   // Generator<string[]>
+    .Refine(x => string.Join("-", x))              // Generator<string>  (e.g. "Skłodowska-Curie")
+    .Refine(x => f.Random.CoinToss() ? $"Von {x}" : x) // Generator<string>  (optional "Von" prefix)
+    .Memo(out last),                               // MemoGenerator<string>
+```
+
+<Tip>
+  Use `Refine` whenever you need a transformation that no built-in modifier covers — joining arrays, formatting values, mapping to a domain type, or anything else. Because `Refine` accepts any `Func<T, TNew>`, it keeps your pipeline fluent without requiring a custom `Generator<T>` subclass.
+</Tip>

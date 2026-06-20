@@ -1,0 +1,114 @@
+---
+title: "Forge: The Generator Module Registry"
+sidebarTitle: "Forge"
+description: "The Forge class is the central access point for all built-in generator modules: Basic, Random, Temporal, Text, and Person."
+---
+
+`Forge` is the root object that every generator lambda receives as its first argument. When you write `f => f.Text.Guid()` or `f => f.Random.Pick(true, false)`, `f` is a `Forge` instance. It holds the underlying random number generator and locale, and it exposes five module properties that give you access to all of Forged's built-in data generators.
+
+## Constructor
+
+`Forge` is a `sealed` class with a single constructor:
+
+```csharp
+public Forge(Random? random, CultureInfo? locale)
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `random` | `Random.Shared` | The `Random` instance used by every generator in this `Forge`. Pass a seeded instance for deterministic output. |
+| `locale` | `CultureInfo.InvariantCulture` | The `CultureInfo` passed to locale-sensitive generators (e.g. title-case, sentence formatting). |
+
+<Note>
+  You never instantiate `Forge` directly during normal usage. The `Faker<TModel>` base class creates and owns a `Forge` instance, and exposes it to your lambdas automatically through the `f` parameter.
+</Note>
+
+## Core properties
+
+`Forge` exposes two data properties alongside its modules:
+
+```csharp
+// The underlying Random — shared by every generator in this Forge
+public Random Rng { get; }
+
+// The locale used for culture-sensitive generators
+public CultureInfo Locale { get; }
+```
+
+You can read `faker.Forge.Rng` from outside the faker if you need the same RNG state elsewhere, but the typical access pattern is through the `f` parameter inside a lambda.
+
+## Generator modules
+
+<CardGroup cols={2}>
+  <Card title="f.Basic" icon="cube">
+    Literal values and custom functions.
+
+    - `Literal<T>(T value)` — always returns the same value
+    - `Func<T>(Func<T> func)` — calls a delegate each time
+  </Card>
+  <Card title="f.Random" icon="shuffle">
+    Random picks, numbers, weighted picks, and coin toss.
+
+    - `CoinToss()` — random `bool`
+    - `Pick<T>(params T[] items)` — pick one from a set
+    - `Pick<T>(T[] items, int count)` — pick many (exact)
+    - `Pick<T>(T[] items, int min, int max)` — pick many (range)
+    - `Pick<T>()` — pick a random enum value
+    - `Number<T>(T? min, T? max)` — any `INumber<T>`
+    - `WeightedPick<T>(T[] items, float[] weights)` — weighted random
+    - `WeightedPick<T>((T item, float weight)[] items)` — tuple overload
+  </Card>
+  <Card title="f.Temporal" icon="calendar">
+    Dates, times, `DateTimeOffset`, and `TimeSpan`.
+
+    - `Between(DateTime? min, DateTime? max)`
+    - `Past(DateTime? earliest)` / `Future(DateTime? latest)`
+    - `DateBetween(DateOnly? min, DateOnly? max)`
+    - `DateInPast(DateOnly? earliest)` / `DateInFuture(DateOnly? latest)`
+    - `TimeBetween(TimeOnly? min, TimeOnly? max)`
+    - `DateTimeOffsetBetween(...)` / `DateTimeOffsetInPast(...)` / `DateTimeOffsetInFuture(...)`
+    - `TimeSpanBetween(TimeSpan? min, TimeSpan? max)`
+  </Card>
+  <Card title="f.Text" icon="text">
+    Strings, GUIDs, Lorem ipsum, templates, and more.
+
+    - `Alpha(int length)` / `Alpha(int min, int max)`
+    - `Alphanumeric(int length)` / `Alphanumeric(int min, int max)`
+    - `Pronounceable(int length)` / `Pronounceable(int min, int max)`
+    - `Hex(int length)` / `Hex(int min, int max)`
+    - `Lorem(int length)` / `Lorem(int min, int max)`
+    - `Waffle(int sentences, WaffleStyle style)`
+    - `Guid(GuidGenerator.Kind kind)` — V4 by default
+    - `Template(string template)`
+  </Card>
+  <Card title="f.Person" icon="user">
+    Person-related data.
+
+    - `Username(float prefixChance, float suffixChance, float leetChance)` — random username with configurable probabilities for prefixes, suffixes, and leet-speak substitutions
+  </Card>
+</CardGroup>
+
+## How `Forge` flows through a lambda
+
+When you configure a faker, every property value is a lambda with the signature `Func<Forge, IGenerator<T>>`. The faker's `Get()` method calls each lambda exactly once (on the first invocation), passing `this.Forge` as the argument:
+
+```csharp
+// Inside the generated Get() implementation:
+_guidGenerator ??= Id(this.Forge);      // this.Forge is the same object your lambda receives as `f`
+_textGenerator ??= FirstName(this.Forge);
+```
+
+This means `faker.Forge` and the `f` inside `f => f.Text.Alpha(5)` are the **same object**, so all generators within a faker share one `Rng` instance and one `Locale`.
+
+```csharp
+var faker = new PersonFaker
+{
+    // `f` here is faker.Forge
+    FirstName = f => f.Text.Alpha(4, 8).Capitalize(),
+    // `f` here is the same faker.Forge
+    IsActive  = f => f.Random.CoinToss(),
+};
+
+// You can also inspect the Forge after construction:
+Console.WriteLine(faker.Forge.Locale.Name); // ""  (InvariantCulture)
+```

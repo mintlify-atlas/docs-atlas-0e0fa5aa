@@ -1,47 +1,148 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Forged in Five Minutes"
+sidebarTitle: "Quickstart"
+description: "Install Forged, annotate a model, and generate fake data in under five minutes with this step-by-step walkthrough."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This guide walks you through everything needed to produce your first fake C# object with Forged. By the end you will have installed the package, annotated a model class, configured the generated faker, and called `Get()` to produce both single and multiple fake instances — all with full compile-time type checking.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Install Atulin.Forged">
+    Add the package to your .NET 10 project using the .NET CLI:
 
     ```bash
-    npm install your-package
+    dotnet add package Atulin.Forged
+    ```
+
+    This single package bundles both the runtime library (`Forged.Core.dll`) and the Roslyn Source Generator (`Forged.Generator.dll`). No additional setup is required — the generator activates automatically on the next build.
+  </Step>
+
+  <Step title="Annotate your model with [Fake]">
+    Decorate any `class` or `record` with the `[Fake]` attribute from the `Forged.Core` namespace. The example below is the `Person` model used throughout the Forged demo project:
+
+    ```csharp
+    using Forged.Core;
+
+    namespace Forged.Demo;
+
+    [Fake]
+    public class Person
+    {
+        public required Guid Id { get; set; }
+        public required string FirstName { get; set; }
+        public required string LastName { get; set; }
+        public required string FullName { get; set; }
+        public List<string>? MiddleNames { get; set; }
+        public string? Nickname { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? EmailAddress { get; set; }
+        public string? Bio { get; set; }
+    }
+    ```
+
+    Build the project once after adding the attribute. The source generator emits a `PersonFaker.g.cs` file containing the `PersonFaker` class — visible in your IDE under **Dependencies → Analyzers → Forged.Generator**.
+  </Step>
+
+  <Step title="Configure the generated PersonFaker">
+    Instantiate `PersonFaker` using an object initializer. Each property accepts a lambda `Func<Forge, IGenerator<T>>` — the `f` parameter exposes all built-in generator modules. The following example is taken directly from the Forged demo project and demonstrates a range of generator features:
+
+    ```csharp
+    using Forged.Core.Generators.Extensions;
+    using Forged.Core.Generators.Text;
+    using Forged.Core.Generators.Utility;
+    using Forged.Demo;
+
+    // `out var` does not work in object initializers, so declare memo holders upfront
+    MemoValueGenerator<string> first = null!;
+    MemoValueGenerator<string> last = null!;
+
+    var faker = new PersonFaker
+    {
+        // Generate a random GUID v7
+        Id = f => f.Text
+            .Guid(GuidGenerator.Kind.V7),
+
+        // Generate a pronounceable first name
+        FirstName = f => f.Text
+            .Pronounceable(1, 3) // pronounceable word: 1–3 syllables
+            .Capitalize()        // capitalize the first letter
+            .Memo(out first),    // store in variable for later cross-reference
+
+        // Generate a last name of one or two parts, e.g. "Skłodowska-Curie"
+        LastName = f => f.Text
+            .Pronounceable(1, 3)
+            .ToLower()
+            .Capitalize()
+            .Array(1, 2)                                      // 1 or 2 words
+            .Refine(x => string.Join("-", x))                 // join with hyphen
+            .Refine(x => f.Random.CoinToss() ? $"Von {x}" : x) // optional "Von" prefix
+            .Memo(out last),
+
+        // Combine the memoized first and last names
+        FullName = f => f.Basic.Func(() => $"{first} {last}"),
+
+        // Generate a list of 0–3 middle names
+        MiddleNames = f => f.Text
+            .Alpha(3, 5)
+            .ToLower()
+            .Capitalize()
+            .List(0, 3),
+
+        // Random username, 20% chance of being null (default)
+        Nickname = f => f.Person
+            .Username()
+            .OrDefault(.2f),
+
+        // Date of birth between 18 and 80 years ago, wrapped as nullable
+        DateOfBirth = f => f.Temporal
+            .Between(DateTime.Now.AddYears(-80), DateTime.Now.AddYears(-18))
+            .Nullable(),
+
+        // Randomly active or not
+        IsActive = f => f.Random
+            .Pick(true, false),
+
+        // A short bio of 3–6 waffle sentences
+        Bio = f => f.Text
+            .Waffle(f.Random.Number<int>(3, 6), WaffleStyle.Fiction),
+    };
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+  <Step title="Generate fake data">
+    Call `Get()` to produce a single instance, `Get(int count)` for an exact number, or `Get(int min, int max)` for a random count within a range:
 
-    ```bash
-    your-cli start
+    ```csharp
+    // Single fake Person
+    var person = faker.Get();
+
+    // Exactly five fake Persons
+    var fivePeople = faker.Get(5);
+
+    // Between two and ten fake Persons (count chosen randomly)
+    var somePeople = faker.Get(2, 10);
     ```
+
+    Each call to `Get()` runs every configured generator pipeline once and assembles a new model instance. Generators are lazily initialized on the first call and reused on subsequent calls, so the pipeline is only built once per faker instance.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+<Note>
+  For reproducible output — useful in unit tests or snapshot comparisons — pass a seeded `Random` instance to the faker constructor:
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+  ```csharp
+  var faker = new PersonFaker(new Random(12345))
+  {
+      Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+      FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+      // ...
+  };
+  ```
+
+  Every call to `faker.Get()` on a seeded faker produces the same sequence of values, regardless of environment or run order.
+</Note>
+
+<Tip>
+  This quickstart covers the most common path. The Guides section explores more advanced topics: referencing already-generated properties with `.Memo()` and `.Func()`, generating nullable value types with `.OrNull()` and `.Nullable()`, building typed collections with `.List()`, `.Array()`, and `.HashSet()`, and composing complex generation pipelines with `.Refine()`.
 </Tip>

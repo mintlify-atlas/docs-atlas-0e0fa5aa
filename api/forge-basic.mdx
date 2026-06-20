@@ -1,0 +1,89 @@
+---
+title: "ForgeBasic: Literal and Function Generators"
+sidebarTitle: "Basic"
+description: "ForgeBasic (f.Basic) provides two fundamental generators: Literal for constant values and Func for custom lambdas."
+---
+
+`ForgeBasic` is the foundation of the Forged generator system. Accessed via `f.Basic`, it exposes two complementary primitives: a **literal** generator that always returns the same fixed value, and a **function** generator that delegates to a caller-supplied lambda each time a value is needed. These are particularly useful when you need deterministic fields in an otherwise random data set, or when you want to integrate custom logic — external service calls, computed values, counters — into a Forged configuration.
+
+---
+
+## Literal\<T\>
+
+Creates a generator that always produces the same constant value regardless of how many times it is invoked.
+
+```csharp
+public Generator<T> Literal<T>(T literal)
+```
+
+<ParamField path="literal" type="T" required={true}>
+  The constant value the generator will always return. Can be any type — strings,
+  enums, numbers, complex objects, or `null` for reference types.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<T>">
+  A `Generator<T>` that calls `Generate()` → always the same `literal` value.
+</ResponseField>
+
+**Example**
+
+```csharp
+// Always set Status to "active" and Version to 42
+var faker = new UserFaker();
+var user = faker.Generate();
+
+// Inside the Forged configuration:
+Status  = f => f.Basic.Literal("active"),
+Version = f => f.Basic.Literal(42),
+IsAdmin = f => f.Basic.Literal(false),
+```
+
+Use `Literal` whenever a field must be a fixed constant across all generated records — for example, to pin a status code, a schema version number, or a sentinel value in test fixtures.
+
+---
+
+## Func\<T\>
+
+Creates a generator that invokes the provided `Func<T>` delegate each time a new value is requested. The delegate is called fresh on every `Generate()` call, so mutable or stateful lambdas produce different values over time.
+
+```csharp
+public Generator<T> Func<T>(Func<T> func)
+```
+
+<ParamField path="func" type="Func<T>" required={true}>
+  A parameterless delegate that returns a value of type `T`. Invoked once per
+  generated record. May close over external state, call external services, or
+  perform arbitrary computation.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<T>">
+  A `Generator<T>` that calls `Generate()` → evaluates `func()` and returns the result.
+</ResponseField>
+
+**Example**
+
+```csharp
+// Delegate to a custom scoring function
+Score = f => f.Basic.Func(() => ComputeScore()),
+
+// Use an incrementing counter as a stable ID
+var counter = 0;
+Id = f => f.Basic.Func(() => ++counter),
+
+// Pull a value from an external source
+Region = f => f.Basic.Func(() => RegionResolver.GetDefault()),
+```
+
+<CodeGroup>
+
+```csharp Fixed value + custom lambda
+Status    = f => f.Basic.Literal("active"),
+Score     = f => f.Basic.Func(() => ComputeScore()),
+```
+
+```csharp Counter-based IDs
+var seq = 0;
+ExternalId = f => f.Basic.Func(() => $"USR-{++seq:D6}"),
+```
+
+</CodeGroup>

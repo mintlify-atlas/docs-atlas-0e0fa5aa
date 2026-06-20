@@ -1,0 +1,184 @@
+---
+title: "Handling Nullable and Optional Property Values"
+sidebarTitle: "Nullable Values"
+description: "Use OrNull(), Nullable(), OrDefault(), and Or() to generate nullable reference types, nullable value types, and optional fields with configurable probability."
+---
+
+C# distinguishes sharply between nullable reference types (e.g., `string?`) and nullable value types (e.g., `DateTime?`, `int?`). Forged mirrors this distinction with separate extension methods for each case, letting you introduce null or alternative values into any generator pipeline with a single fluent call and a probability float.
+
+## Value Types: `.OrNull()` and `.Nullable()`
+
+Structs (value types) cannot be `null` on their own — they must be wrapped in `Nullable<T>` (written as `T?`). Forged provides two methods on any `Generator<T>` where `T : struct`.
+
+### `.OrNull(float probability)`
+
+Returns `null` with the given probability (0.0–1.0), otherwise delegates to the inner generator. The return type becomes `Generator<T?>`.
+
+```csharp
+// 20% chance of null, otherwise a random past DateTime
+DateOfBirth = f => f.Temporal.Past().OrNull(0.2f),
+
+// 50% chance of null for an optional score
+Score = f => f.Random.Number<int>(0, 100).OrNull(0.5f),
+```
+
+### `.Nullable()`
+
+Converts `Generator<T>` (struct) to `Generator<T?>` with **zero** probability of null — it simply lifts the value type into the nullable wrapper. This is useful when your model property is declared as `T?` but you always want a value:
+
+```csharp
+// DateOfBirth is DateTime? but we always want a date — just make it compatible
+DateOfBirth = f => f.Temporal
+    .Between(DateTime.Now.AddYears(-80), DateTime.Now.AddYears(-18))
+    .Nullable(),
+```
+
+<Note>
+  `.OrNull()` and `.Nullable()` are only available when `T` is a **struct** (value type). For nullable reference types such as `string?` or `List<T>?`, use `.OrDefault()` instead.
+</Note>
+
+## Reference Types: `.OrDefault()`
+
+Reference types are already nullable in C# — `string?` and `string` are the same runtime type. To make a generator occasionally return `null` for a reference-type property, use `.OrDefault(float probability)`, which returns `default(T?)` (i.e., `null`) with the specified probability.
+
+```csharp
+// 20% chance of null username
+Nickname = f => f.Person.Username().OrDefault(0.2f),
+
+// 30% chance the whole list is null rather than populated
+Authors = f => f.Text.Pronounceable(1, 3).Capitalize().List(1, 4).OrDefault(0.3f),
+```
+
+`.OrDefault()` is defined on the base `Generator<T>` class and works for both reference types and value types (returning the type's default, which for structs is `default(T)` — the zero-value, not `null`).
+
+## Any Type: `.Or(T other, float probability)`
+
+`.Or()` is not specifically about null — it returns an arbitrary alternative value with the specified probability, otherwise it returns the generated value. The type stays `T` (non-nullable):
+
+```csharp
+// 10% chance of the literal "Pending", otherwise a randomly picked status
+Status = f => f.Random.Pick("Active", "Inactive").Or("Pending", 0.1f),
+
+// 5% chance of -1 (a sentinel "unknown" score)
+Score = f => f.Random.Number<int>(0, 100).Or(-1, 0.05f),
+```
+
+## Optional (Omitted) Properties
+
+Any non-`required` property in a Forged-generated faker is optional in the initializer. If you omit it entirely, the model property keeps its default value — `null` for nullable types, `false` for `bool`, `0` for numeric types, etc. No generator runs for that property at all.
+
+```csharp
+// EmailAddress and Bio are not required — omit them to leave them null
+var faker = new PersonFaker
+{
+    Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+    FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+    LastName  = f => f.Text.Pronounceable(1, 3).Capitalize(),
+    IsActive  = f => f.Random.Pick(true, false),
+    // EmailAddress → null (omitted, property default)
+    // Bio          → null (omitted, property default)
+};
+```
+
+## Choosing the Right API
+
+<Tabs>
+  <Tab title="Value types (structs)">
+    Use `.OrNull()` when you want a mix of values and nulls, or `.Nullable()` when you always want a value but the property is typed as `T?`:
+
+    ```csharp
+    // DateTime? with 20% nulls
+    DateOfBirth = f => f.Temporal.Past().OrNull(0.2f),
+
+    // DateTime? always populated
+    CreatedAt = f => f.Temporal.Past().Nullable(),
+
+    // int? with 50% nulls
+    OptionalScore = f => f.Random.Number<int>(0, 100).OrNull(0.5f),
+    ```
+  </Tab>
+  <Tab title="Reference types">
+    Use `.OrDefault()` to occasionally produce `null` for reference-type properties:
+
+    ```csharp
+    // string? with 20% nulls
+    Nickname = f => f.Person.Username().OrDefault(0.2f),
+
+    // List<string>? with 30% nulls
+    MiddleNames = f => f.Text.Alpha(3, 5).Capitalize().List(0, 3).OrDefault(0.3f),
+    ```
+  </Tab>
+  <Tab title="Alternative values">
+    Use `.Or()` to substitute any non-null fallback with a given probability:
+
+    ```csharp
+    // string — 10% chance of literal "N/A"
+    Status = f => f.Random.Pick("Active", "Inactive").Or("N/A", 0.1f),
+
+    // int — 5% chance of sentinel -1
+    Score = f => f.Random.Number<int>(0, 100).Or(-1, 0.05f),
+    ```
+  </Tab>
+  <Tab title="Optional properties">
+    Omit the property from the faker initializer entirely to always use the model's default value without running any generator:
+
+    ```csharp
+    var faker = new PersonFaker
+    {
+        Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+        FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+        LastName  = f => f.Text.Pronounceable(1, 3).Capitalize(),
+        IsActive  = f => f.Random.Pick(true, false),
+        // Non-required properties omitted → default(T)
+    };
+    ```
+  </Tab>
+</Tabs>
+
+## Quick Reference
+
+| Scenario | API | Return type |
+|---|---|---|
+| Struct property, sometimes null | `.OrNull(float probability)` | `Generator<T?>` |
+| Struct property, always a value but typed `T?` | `.Nullable()` | `Generator<T?>` |
+| Reference-type property, sometimes null | `.OrDefault(float probability)` | `Generator<T?>` |
+| Any type, sometimes a specific fallback | `.Or(T other, float probability)` | `Generator<T>` |
+| Non-required property, always default | Omit from faker initializer | `default(T)` |
+
+## Complete Example
+
+The model below mixes `required` properties, optional-but-configured properties, and entirely omitted properties:
+
+```csharp
+[Fake]
+public class Person
+{
+    public required Guid      Id          { get; set; }
+    public required string    FirstName   { get; set; }
+    public required string    LastName    { get; set; }
+    public List<string>?      MiddleNames { get; set; }
+    public string?            Nickname    { get; set; }
+    public bool               IsActive    { get; set; }
+    public DateTime?          DateOfBirth { get; set; }
+    public string?            EmailAddress { get; set; }
+}
+
+var faker = new PersonFaker
+{
+    // Required — must provide generators
+    Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),
+    FirstName = f => f.Text.Pronounceable(1, 3).Capitalize(),
+    LastName  = f => f.Text.Pronounceable(1, 3).Capitalize(),
+
+    // Optional, but configured with a nullable pipeline
+    MiddleNames = f => f.Text.Alpha(3, 5).Capitalize().List(0, 3).OrDefault(0.5f),
+    Nickname    = f => f.Person.Username().OrDefault(0.2f),
+    DateOfBirth = f => f.Temporal
+                        .Between(DateTime.Now.AddYears(-80), DateTime.Now.AddYears(-18))
+                        .OrNull(0.1f),
+
+    IsActive    = f => f.Random.Pick(true, false),
+
+    // EmailAddress is omitted — will always be null
+};
+```

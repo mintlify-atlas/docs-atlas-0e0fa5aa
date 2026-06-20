@@ -1,0 +1,174 @@
+---
+title: "Generating Collections and Arrays with Forged"
+sidebarTitle: "Collections"
+description: "Use Forged's built-in collection modifiers to generate arrays, lists, hash sets, and dictionaries of fake data from any generator."
+---
+
+Any `Generator<T>` in Forged can be promoted into a collection generator with a single method call. Rather than writing a loop yourself, you chain one of the built-in collection modifiers directly onto the generator pipeline. These modifiers respect the same seeded `Random` instance as every other generator in the faker, so collection length and element values are both reproducible when a seed is provided.
+
+## Core Collection Modifiers
+
+The following methods are defined on the `Generator<T>` base class and are available on every generator in Forged.
+
+### Fixed-Length Collections
+
+Pass a single integer to produce a collection with exactly that many elements:
+
+| Method | Return type |
+|---|---|
+| `.Enumerable(int length)` | `Generator<IEnumerable<T>>` |
+| `.Array(int length)` | `Generator<T[]>` |
+| `.List(int length)` | `Generator<List<T>>` |
+| `.HashSet(int length)` | `Generator<HashSet<T>>` |
+
+### Variable-Length Collections
+
+Pass a `min` and `max` to let the length itself be randomized on each `Get()` call:
+
+| Method | Return type |
+|---|---|
+| `.Enumerable(int min, int max)` | `Generator<IEnumerable<T>>` |
+| `.Array(int min, int max)` | `Generator<T[]>` |
+| `.List(int min, int max)` | `Generator<List<T>>` |
+| `.HashSet(int min, int max)` | `Generator<HashSet<T>>` |
+
+### Examples
+
+```csharp
+var faker = new ProductFaker
+{
+    // Exactly 3 uppercase tags
+    Tags = f => f.Text.Alpha(5).ToUpper().List(3),
+
+    // Between 1 and 10 random integer scores
+    Scores = f => f.Random.Number<int>(0, 100).Array(1, 10),
+
+    // 0 to 3 optional middle names
+    MiddleNames = f => f.Text.Alpha(3, 5).Capitalize().List(0, 3),
+
+    // Exactly 4 unique category codes (HashSet enforces uniqueness)
+    CategoryCodes = f => f.Text.Alphanumeric(6).ToUpper().HashSet(4),
+};
+```
+
+<Tip>
+  Use `.HashSet(n)` instead of `.List(n)` when the values produced by your generator may collide and you need a unique set. The `HashSet<T>` constructor will silently discard duplicates, so the actual collection size may be smaller than `n` if the underlying generator produces repeated values.
+</Tip>
+
+## Converting `IEnumerable<T>` Generators
+
+When you use `.Enumerable()` (or receive a `Generator<IEnumerable<T>>` from another step) and need a concrete collection type, Forged provides the following extension methods.
+
+### `.AsList()`
+
+Converts a `Generator<IEnumerable<T>>` to a `Generator<List<T>>`:
+
+```csharp
+Tags = f => f.Text.Alpha(5).ToUpper().Enumerable(3).AsList(),
+```
+
+### `.AsHashSet()`
+
+Converts a `Generator<IEnumerable<T>>` to a `Generator<HashSet<T>>`:
+
+```csharp
+Codes = f => f.Text.Alphanumeric(6).Enumerable(5).AsHashSet(),
+```
+
+### `.AsDictionary<TKey, TValue>(keySelector, valueSelector)`
+
+Converts a `Generator<IEnumerable<T>>` to a `Generator<Dictionary<TKey, TValue>>` using two selector functions:
+
+```csharp
+// Produce 5 unique uppercase keys, then map each to a random quantity
+Inventory = f => f.Text.Alpha(4).ToUpper()
+    .List(5)
+    .Refine(names => names.Distinct().ToList()) // deduplicate first
+    .AsDictionary(
+        name  => name,                                        // key selector
+        _     => f.Random.Number<int>(0, 100).Generate()     // value selector
+    ),
+```
+
+<Note>
+  `.AsDictionary()` is an extension on `Generator<IEnumerable<T>>`. If you start from a `.List()` or `.Array()`, chain `.Refine(x => x.AsEnumerable())` or use `.Enumerable()` directly to reach the right type, or use the approach above where `.Refine()` returns a `List<T>` that implements `IEnumerable<T>`.
+</Note>
+
+### `.Shuffle()`
+
+Produces a `Generator<IEnumerable<T>>` whose elements are in a randomised order each time `Generate()` is called:
+
+```csharp
+ShuffledNames = f => f.Text.Alpha(5).Capitalize().Enumerable(8).Shuffle(),
+```
+
+The shuffle uses `Random.Shuffle(Span<T>)` on the underlying array, so it participates in seeded RNG like every other operation.
+
+## Using `.Refine()` for Inline Transformations
+
+`.Refine<TNew>(Func<T, TNew> refiner)` transforms the value produced by a generator. It is particularly useful for post-processing collections:
+
+```csharp
+// Deduplicate and sort a list inline
+SortedUniqueTags = f => f.Text.Alpha(4).ToUpper()
+    .List(10)
+    .Refine(list => list.Distinct().OrderBy(x => x).ToList()),
+```
+
+You can also use `.Refine()` to convert between collection types when extension methods are not available:
+
+```csharp
+// Convert to a Queue<T>
+Queue = f => f.Text.Alpha(3).List(5)
+    .Refine(list => new Queue<string>(list)),
+```
+
+## Nullable Collections
+
+Collection generators are themselves `Generator<TCollection>` instances and support the same nullable modifiers as any other generator. Use `.OrDefault(float probability)` to make the entire collection optionally `null`:
+
+```csharp
+MiddleNames = f => f.Text
+    .Alpha(3, 5)
+    .Capitalize()
+    .List(0, 3)
+    .OrDefault(0.5f), // 50% chance the property is null rather than an empty/populated list
+```
+
+This matches the pattern used in the Forged quick-start guide and the demo project's `MiddleNames` property.
+
+## Complete Model Example
+
+```csharp
+[Fake]
+public class BlogPost
+{
+    public required Guid   Id       { get; set; }
+    public required string Title    { get; set; }
+    public required string[] Tags   { get; set; }
+    public List<string>?   Authors  { get; set; }
+    public HashSet<string> Codes    { get; set; } = [];
+    public Dictionary<string, int> Votes { get; set; } = [];
+}
+
+var faker = new BlogPostFaker
+{
+    Id      = f => f.Text.Guid(GuidGenerator.Kind.V7),
+    Title   = f => f.Text.Lorem(3, 6).Sentencify(4, 8),
+
+    // Exactly 3 tags
+    Tags    = f => f.Text.Alpha(5).ToUpper().Array(3),
+
+    // 0–2 optional author names, or null entirely
+    Authors = f => f.Text.Pronounceable(1, 3).Capitalize().List(0, 2).OrDefault(0.3f),
+
+    // 4 unique codes
+    Codes   = f => f.Text.Alphanumeric(6).ToUpper().HashSet(4),
+
+    // Dictionary of tag → vote count
+    Votes   = f => f.Text.Alpha(4).ToUpper()
+                   .List(5)
+                   .Refine(names => names.Distinct().ToList())
+                   .AsDictionary(name => name, _ => f.Random.Number<int>(0, 1000).Generate()),
+};
+```

@@ -1,0 +1,79 @@
+---
+title: "ForgePerson: Username Generator"
+sidebarTitle: "Person"
+description: "ForgePerson (f.Person) provides a configurable username generator with optional prefixes, suffixes, and leet-speak character substitutions."
+---
+
+`ForgePerson` is accessed via `f.Person` and currently exposes a single method: `Username`. It generates realistic-looking usernames by combining a core word drawn from a locale-aware data file with optional decorative prefixes and suffixes, and an optional leet-speak pass that substitutes letters with visually similar symbols or digits (for example, `a` → `4`, `e` → `3`, `s` → `$`). All three modifiers are governed by independent probability parameters so you can tune the flavour of generated names from clean and readable to deliberately stylised gamer tags.
+
+---
+
+## Username
+
+Produces a random username string. The core word is always included; prefixes, suffixes, and leet-speak substitutions are applied probabilistically based on the supplied chances.
+
+```csharp
+public Generator<string> Username(
+    float prefixChance = 0.5f,
+    float suffixChance = 0.5f,
+    float leetChance   = 0.1f
+)
+```
+
+<ParamField path="prefixChance" type="float" required={false}>
+  Probability from `0.0` (never) to `1.0` (always) that a prefix word is prepended to
+  the core username. Defaults to `0.5` — a prefix is added about half the time.
+</ParamField>
+
+<ParamField path="suffixChance" type="float" required={false}>
+  Probability from `0.0` (never) to `1.0` (always) that a suffix is appended to the
+  username. Defaults to `0.5` — a suffix is added about half the time.
+</ParamField>
+
+<ParamField path="leetChance" type="float" required={false}>
+  Per-character probability from `0.0` (never) to `1.0` (always) that each letter in
+  the core word is replaced with a leet-speak equivalent. Defaults to `0.1` — about
+  one in ten characters is substituted.
+
+  Example substitutions from the built-in table:
+
+  | Letter | Possible replacements |
+  |---|---|
+  | `a` | `4`, `@`, `^` |
+  | `e` | `3` |
+  | `i` | `1`, `!`, `\|` |
+  | `o` | `0`, `()` |
+  | `s` | `5`, `$`, `z` |
+  | `t` | `7`, `+`, `†` |
+</ParamField>
+
+<ResponseField name="returns" type="Generator<string>">
+  A randomly assembled username string. With default probabilities the output
+  might look like `"shadow_wolf"`, `"DarkByte42"`, or `"pr0t0n"`.
+</ResponseField>
+
+**Examples**
+
+<CodeGroup>
+
+```csharp Default probabilities
+// Any combination of prefix/suffix/leet at default rates
+Nickname = f => f.Person.Username(),
+```
+
+```csharp High leet chance, no suffix
+// Strong leet style — prefix likely, suffix never, heavy substitution
+Gamertag = f => f.Person.Username(prefixChance: 0.7f, suffixChance: 0f, leetChance: 0.5f),
+```
+
+```csharp Clean, no decoration
+// Always just the bare core word
+Handle = f => f.Person.Username(prefixChance: 0f, suffixChance: 0f, leetChance: 0f),
+```
+
+```csharp Optional screen name with null fallback
+// 20% chance of being null, otherwise generated with defaults
+ScreenName = f => f.Person.Username().OrDefault(0.2f),
+```
+
+</CodeGroup>

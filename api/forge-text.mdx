@@ -1,0 +1,318 @@
+---
+title: "ForgeText: String and GUID Generators"
+sidebarTitle: "Text"
+description: "ForgeText (f.Text) provides generators for alphanumeric strings, alphabetic strings, pronounceable words, Lorem ipsum, GUIDs, hex strings, templates, and waffle text."
+---
+
+`ForgeText` collects every string and identifier generator in Forged under the `f.Text` accessor. Whether you need a compact token, a human-readable placeholder word, a block of filler prose, a GUID, or a structured string matching a specific pattern, this module has a generator for it. Most string generators come in two overloads: a single-`length` form that produces a string of exactly that size, and a `minLength`/`maxLength` form that randomises the length within the given range.
+
+---
+
+## Alphanumeric
+
+Generates a string composed of random ASCII letters (`a–z`, `A–Z`) and digits (`0–9`).
+
+```csharp
+public Generator<string> Alphanumeric(int length)
+public Generator<string> Alphanumeric(int minLength, int maxLength)
+```
+
+<ParamField path="length" type="int" required={true}>
+  The exact character length of the generated string (single-length overload).
+</ParamField>
+
+<ParamField path="minLength" type="int" required={true}>
+  The minimum character length (range overload).
+</ParamField>
+
+<ParamField path="maxLength" type="int" required={true}>
+  The maximum character length (range overload).
+</ParamField>
+
+<ResponseField name="returns" type="Generator<string>">
+  A random alphanumeric string of the specified length.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp Fixed length
+SessionToken = f => f.Text.Alphanumeric(32),
+```
+
+```csharp Variable length
+ReferenceCode = f => f.Text.Alphanumeric(8, 16),
+```
+
+</CodeGroup>
+
+---
+
+## Alpha
+
+Generates a string composed only of random ASCII letters (`a–z`, `A–Z`) — no digits.
+
+```csharp
+public Generator<string> Alpha(int length)
+public Generator<string> Alpha(int minLength, int maxLength)
+```
+
+<ParamField path="length" type="int" required={true}>
+  The exact character length (single-length overload).
+</ParamField>
+
+<ParamField path="minLength" type="int" required={true}>
+  The minimum character length (range overload).
+</ParamField>
+
+<ParamField path="maxLength" type="int" required={true}>
+  The maximum character length (range overload).
+</ParamField>
+
+<ResponseField name="returns" type="Generator<string>">
+  A random alphabetic-only string of the specified length.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp Fixed length
+CountryCode = f => f.Text.Alpha(2),
+```
+
+```csharp Variable length
+Slug = f => f.Text.Alpha(4, 12),
+```
+
+</CodeGroup>
+
+---
+
+## Pronounceable
+
+Generates a human-readable, syllable-based string built from consonant onsets, vowel nuclei, and optional codas. The result is not a real word but reads naturally and is easy to say aloud. The `length` / `minLength` / `maxLength` parameters control the **number of syllables**, not the character count.
+
+```csharp
+public Generator<string> Pronounceable(int length)
+public Generator<string> Pronounceable(int minLength, int maxLength)
+```
+
+<ParamField path="length" type="int" required={true}>
+  The exact number of syllables (single-length overload).
+</ParamField>
+
+<ParamField path="minLength" type="int" required={true}>
+  The minimum number of syllables (range overload).
+</ParamField>
+
+<ParamField path="maxLength" type="int" required={true}>
+  The maximum number of syllables (range overload).
+</ParamField>
+
+<ResponseField name="returns" type="Generator<string>">
+  A randomly assembled, pronounceable string.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp Fixed syllable count
+// e.g. "kraeblint", "shoofen"
+DisplayName = f => f.Text.Pronounceable(3),
+```
+
+```csharp Variable syllable count
+// e.g. "vrelstoad", "plimurkath"
+CityName = f => f.Text.Pronounceable(2, 5),
+```
+
+</CodeGroup>
+
+---
+
+## Lorem
+
+Generates a string of Lorem Ipsum filler text sampled from a built-in corpus of classical and extended Latin-like words. The `length` / `minLength` / `maxLength` parameters control the **word count**, and words are joined with single spaces.
+
+```csharp
+public Generator<string> Lorem(int length)
+public Generator<string> Lorem(int minLength, int maxLength)
+```
+
+<ParamField path="length" type="int" required={true}>
+  The exact number of words to include (single-length overload).
+</ParamField>
+
+<ParamField path="minLength" type="int" required={true}>
+  The minimum word count (range overload).
+</ParamField>
+
+<ParamField path="maxLength" type="int" required={true}>
+  The maximum word count (range overload).
+</ParamField>
+
+<ResponseField name="returns" type="Generator<string>">
+  A space-separated Lorem Ipsum string of the specified word count.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp Fixed word count
+// e.g. "lorem ipsum dolor sit amet consectetur adipiscing elit sed do"
+Excerpt = f => f.Text.Lorem(10),
+```
+
+```csharp Variable word count
+Description = f => f.Text.Lorem(20, 60),
+```
+
+</CodeGroup>
+
+---
+
+## Waffle
+
+Generates one or more sentences of contextually plausible filler text using a locale-aware template corpus. Unlike `Lorem`, `Waffle` produces grammatically structured sentences with subjects, verbs, objects, and adjectives drawn from the selected style's word lists.
+
+```csharp
+public Generator<string> Waffle(int sentences, WaffleStyle style = WaffleStyle.Technical)
+```
+
+<ParamField path="sentences" type="int" required={true}>
+  The number of sentences to generate and concatenate.
+</ParamField>
+
+<ParamField path="style" type="WaffleStyle" required={false}>
+  The vocabulary style to use. Defaults to `WaffleStyle.Technical`.
+
+  | Value | Description |
+  |---|---|
+  | `WaffleStyle.Technical` | Corporate / engineering language — systems, frameworks, architectures. |
+  | `WaffleStyle.Fiction` | Narrative / story language — characters, settings, actions. |
+</ParamField>
+
+<ResponseField name="returns" type="Generator<string>">
+  A string of `sentences` generated sentences in the chosen style.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp Technical style
+Summary = f => f.Text.Waffle(3),
+```
+
+```csharp Fiction style
+Synopsis = f => f.Text.Waffle(5, WaffleStyle.Fiction),
+```
+
+</CodeGroup>
+
+---
+
+## Hex
+
+Generates a lowercase hexadecimal string (characters `0–9`, `a–f`).
+
+```csharp
+public Generator<string> Hex(int length)
+public Generator<string> Hex(int minLength, int maxLength)
+```
+
+<ParamField path="length" type="int" required={true}>
+  The exact character length of the hex string (single-length overload).
+</ParamField>
+
+<ParamField path="minLength" type="int" required={true}>
+  The minimum character length (range overload).
+</ParamField>
+
+<ParamField path="maxLength" type="int" required={true}>
+  The maximum character length (range overload).
+</ParamField>
+
+<ResponseField name="returns" type="Generator<string>">
+  A random lowercase hex string of the specified length.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp Fixed length (e.g. a colour hash)
+ColorHex = f => f.Text.Hex(6),  // e.g. "3a9fc1"
+```
+
+```csharp Variable length (e.g. a short fingerprint)
+Fingerprint = f => f.Text.Hex(8, 16),
+```
+
+</CodeGroup>
+
+---
+
+## Guid
+
+Generates a random `System.Guid`. Two version variants are supported via the `GuidGenerator.Kind` enum.
+
+```csharp
+public Generator<Guid> Guid(GuidGenerator.Kind kind = GuidGenerator.Kind.V4)
+```
+
+<ParamField path="kind" type="GuidGenerator.Kind" required={false}>
+  The GUID version to produce. Defaults to `Kind.V4`.
+
+  | Value | Description |
+  |---|---|
+  | `GuidGenerator.Kind.V4` | Version 4 — fully random (uses `Guid.NewGuid()`). |
+  | `GuidGenerator.Kind.V7` | Version 7 — time-ordered random (uses `Guid.CreateVersion7()`). Useful for database primary keys that benefit from monotonic ordering. |
+</ParamField>
+
+<ResponseField name="returns" type="Generator<Guid>">
+  A random `Guid` of the specified version.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp V4 (default)
+Id = f => f.Text.Guid(),
+```
+
+```csharp V7 (time-ordered)
+Id = f => f.Text.Guid(GuidGenerator.Kind.V7),
+```
+
+</CodeGroup>
+
+---
+
+## Template
+
+Generates a string by expanding a template that contains special placeholder tokens. Literal characters outside the placeholders are passed through unchanged. A backslash (`\`) escapes the following character so it is never treated as a placeholder.
+
+```csharp
+public Generator<string> Template(string template)
+```
+
+<ParamField path="template" type="string" required={true}>
+  A format string containing any combination of the placeholder tokens below,
+  plus arbitrary literal characters.
+
+  | Token | Replacement |
+  |---|---|
+  | `#` | A random digit (`0`–`9`) |
+  | `?` | A random ASCII letter (`a`–`z`, `A`–`Z`) |
+  | `*` | A random alphanumeric character (`a`–`z`, `A`–`Z`, `0`–`9`) |
+  | `\` | Escape — the next character is emitted literally |
+</ParamField>
+
+<ResponseField name="returns" type="Generator<string>">
+  A string with all placeholder tokens replaced by their corresponding random characters.
+</ResponseField>
+
+**Examples**
+
+```csharp
+// US phone number format: (555) 867-5309
+PhoneNumber = f => f.Text.Template("(###) ###-####"),
+
+// Alphanumeric product code: e.g. "BK-7392-4q"
+ProductCode = f => f.Text.Template("??-####-*"),
+
+// Literal hash sign — escaped so "#" is output verbatim
+HashTag = f => f.Text.Template("\\#trending-???"),
+```

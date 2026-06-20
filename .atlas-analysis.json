@@ -1,0 +1,68 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Forged",
+  "projectDescription": "A fast, strict, and strongly-typed data generator (faker) for C# powered by Source Generators, enabling declarative model faking with compile-time enforcement of required properties, nullability, and type safety.",
+  "theme": "luma",
+  "primaryColor": "#044c84",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "installation"]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": ["concepts/fake-attribute", "concepts/faker-class", "concepts/forge", "concepts/generators"]
+          },
+          {
+            "group": "Guides",
+            "pages": ["guides/deterministic-generation", "guides/referencing-properties", "guides/collections", "guides/nullable-values"]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Modules",
+            "pages": ["api/forge-basic", "api/forge-random", "api/forge-temporal", "api/forge-text", "api/forge-person"]
+          },
+          {
+            "group": "Modifiers & Extensions",
+            "pages": ["api/core-modifiers", "api/string-extensions", "api/temporal-extensions", "api/collection-extensions"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Source-generated fakers — no reflection, fully trim/AOT compatible",
+    "Compile-time enforcement of required properties via C# required modifier",
+    "Fluent, composable generator pipeline API",
+    "Deterministic generation with seeded Random instances",
+    "Built-in generators for text, numbers, dates, GUIDs, usernames, and more",
+    "Memo pattern for cross-property value referencing",
+    "Nullable and struct-aware extensions (OrNull, Nullable, OrDefault)"
+  ],
+  "publicApiSurface": [
+    "FakeAttribute — marker attribute for classes/structs to generate a faker for",
+    "Faker<TModel> — abstract base class for generated fakers (Get(), Get(int), Get(int, int))",
+    "Forge — main entry point providing access to all generator modules (Basic, Random, Temporal, Text, Person)",
+    "Generator<T> — base generator class with fluent modifiers (Or, OrDefault, Refine, Enumerable, Array, List, HashSet, Memo, Cast)",
+    "ForgeBasic.Literal<T>(T) / ForgeBasic.Func<T>(Func<T>)",
+    "ForgeRandom.Pick<T>(...) / Number<T>() / WeightedPick<T>() / CoinToss()",
+    "ForgeTemporal.Between() / Past() / Future() / DateBetween() / DateInPast() / DateInFuture() / TimeBetween() / DateTimeOffsetBetween() / TimeSpanBetween()",
+    "ForgeText.Alphanumeric() / Alpha() / Pronounceable() / Lorem() / Waffle() / Hex() / Guid() / Template()",
+    "ForgePerson.Username(float, float, float)",
+    "StringGeneratorExtensions: ToUpper() / ToLower() / ToTitleCase() / Capitalize() / Sentencify()",
+    "StructGeneratorExtensions: OrNull(float) / Nullable()",
+    "DateTimeGeneratorExtensions: ToUtc() / ToLocal() / ToDateOnly() / ToTimeOnly() / TruncateToDate()",
+    "EnumerableGeneratorExtensions: AsList() / AsHashSet() / AsDictionary() / Shuffle()",
+    "MemoGenerator<T> / MemoValueGenerator<T>"
+  ]
+}

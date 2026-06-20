@@ -1,0 +1,174 @@
+---
+title: "Collection and Enumerable Extension Methods"
+sidebarTitle: "Collection Extensions"
+description: "Extension methods for converting IEnumerable<T> and ICollection<T> generators into lists, hash sets, and dictionaries, plus a shuffle extension."
+---
+
+Once you have a `Generator<IEnumerable<T>>` or `Generator<ICollection<T>>` — produced by `.Enumerable()`, `.Array()`, `.List()`, or any other multi-value factory — these extension methods let you materialise the sequence into a specific concrete collection type, randomise its order, or project it into a dictionary, all without leaving the fluent pipeline.
+
+The extensions are split across two files: `EnumerableGeneratorExtensions` for `Generator<IEnumerable<T>>` and `CollectionGeneratorExtensions` for `Generator<ICollection<T>>`. A further pair of nullable helpers for value types lives in `StructGeneratorExtensions` and is documented at the bottom of this page.
+
+---
+
+## On `Generator<IEnumerable<T>>`
+
+### `.AsList()`
+
+Materialises the enumerable into a `List<T>` via `Enumerable.ToList()`.
+
+**Returns** `Generator<List<T>>`
+
+```csharp
+Names = f => f.Person.FirstName().Enumerable(3, 7).AsList(),
+```
+
+---
+
+### `.AsHashSet()`
+
+Materialises the enumerable into a `HashSet<T>` via `Enumerable.ToHashSet()`. Duplicate values produced by the inner generator are silently deduplicated.
+
+**Returns** `Generator<HashSet<T>>`
+
+```csharp
+UniqueIds = f => f.Random.Guid().Enumerable(5).AsHashSet(),
+```
+
+---
+
+### `.AsDictionary<TKey, TValue>(Func<T, TKey> keySelector, Func<T, TValue> valueSelector)`
+
+Projects each element of the generated sequence into a `Dictionary<TKey, TValue>` using caller-supplied key and value selector functions.
+
+<ParamField path="keySelector" type="Func<T, TKey>" required>
+  A function that extracts the dictionary key from each element. Keys must be non-null (`TKey : notnull`).
+</ParamField>
+
+<ParamField path="valueSelector" type="Func<T, TValue>" required>
+  A function that extracts the dictionary value from each element.
+</ParamField>
+
+**Returns** `Generator<Dictionary<TKey, TValue>>`
+
+<Note>
+  `TKey` is constrained to `notnull`. Passing a key selector that returns `null` at runtime will throw an `ArgumentNullException` from `ToDictionary`. Ensure your key selector always returns a non-null value.
+</Note>
+
+```csharp
+Inventory = f => f.Text.Alpha(4).ToUpper()
+    .List(5)
+    .Refine(names => (IEnumerable<string>)names)
+    .AsDictionary(
+        key   => key,
+        _     => f.Random.Number<int>(0, 100).Generate()
+    ),
+```
+
+---
+
+### `.Shuffle()`
+
+Wraps the generator in a `ShuffleGenerator<T>` that materialises the sequence into an array, shuffles it in place with `Random.Shuffle(Span<T>)`, and returns the result as `IEnumerable<T>`.
+
+**Returns** `Generator<IEnumerable<T>>`
+
+<Tip>
+  `.Shuffle()` is particularly useful after a fixed ordered sequence — for example, shuffling a pre-defined list of roles before taking the first few as assigned permissions.
+</Tip>
+
+```csharp
+ShuffledColors = f => f.Text.Alpha(5).Enumerable(8).Shuffle(),
+```
+
+---
+
+## On `Generator<ICollection<T>>`
+
+These two methods mirror their `IEnumerable<T>` counterparts but operate on `Generator<ICollection<T>>` directly.
+
+### `.AsList()`
+
+Converts the generated `ICollection<T>` to a `List<T>`.
+
+**Returns** `Generator<List<T>>`
+
+```csharp
+Items = f => someCollectionGenerator.AsList(),
+```
+
+---
+
+### `.AsHashSet()`
+
+Converts the generated `ICollection<T>` to a `HashSet<T>`, deduplicating any repeated elements.
+
+**Returns** `Generator<HashSet<T>>`
+
+```csharp
+UniqueItems = f => someCollectionGenerator.AsHashSet(),
+```
+
+---
+
+## Struct nullable helpers (from `StructGeneratorExtensions`)
+
+These two methods are available on any `Generator<T>` where `T : struct`. They let you introduce nullable value types into your pipeline without a manual `.Refine()`.
+
+### `.OrNull(float probability)`
+
+Returns a `Generator<T?>` that produces `null` with the given probability and the inner generator's value otherwise.
+
+<ParamField path="probability" type="float" required>
+  A value between `0.0` and `1.0` representing the chance of returning `null`.
+</ParamField>
+
+**Returns** `Generator<T?>`
+
+```csharp
+// 40 % chance of no score
+Score = f => f.Random.Number<int>(0, 100).OrNull(0.4f),
+```
+
+---
+
+### `.Nullable()`
+
+Lifts a `Generator<T>` (where `T : struct`) into a `Generator<T?>` without introducing any null probability. Every value produced is a non-null `T?`. Useful when a property's declared type is `T?` but you still want every generated object to carry a value.
+
+**Returns** `Generator<T?>`
+
+```csharp
+Quantity = f => f.Random.Number<int>(1, 50).Nullable(),
+```
+
+---
+
+## Full dictionary example
+
+<CodeGroup>
+
+```csharp Product inventory
+Inventory = f => f.Text.Alpha(4).ToUpper()
+    .List(5)
+    .Refine(names => (IEnumerable<string>)names)
+    .AsDictionary(
+        key => key,
+        _   => f.Random.Number<int>(0, 100).Generate()
+    ),
+```
+
+```csharp Shuffled word list
+WordBank = f => f.Text.Word()
+    .Enumerable(10)
+    .Shuffle()
+    .AsList(),
+```
+
+```csharp Unique permission set
+Permissions = f => f.Text.Alpha(4)
+    .ToUpper()
+    .Enumerable(3, 8)
+    .AsHashSet(),
+```
+
+</CodeGroup>

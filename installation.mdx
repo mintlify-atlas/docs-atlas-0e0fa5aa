@@ -1,0 +1,87 @@
+---
+title: "Installing Forged in Your .NET Project"
+sidebarTitle: "Installation"
+description: "Add the Atulin.Forged NuGet package to any .NET 10 project. The package includes both the runtime library and the Roslyn source generator."
+---
+
+The `Atulin.Forged` NuGet package is a single, self-contained bundle that delivers everything Forged needs. It ships `Forged.Core.dll` — the runtime library containing `FakeAttribute`, `Faker<TModel>`, `Forge`, and all generator types — alongside `Forged.Generator.dll`, the Roslyn Source Generator that analyses your `[Fake]`-annotated types and emits strongly-typed faker classes at build time. You do not need to install separate packages for the generator and the runtime; one reference is all it takes.
+
+## Install the Package
+
+<CodeGroup>
+  ```bash .NET CLI
+  dotnet add package Atulin.Forged
+  ```
+
+  ```xml Project file (.csproj)
+  <PackageReference Include="Atulin.Forged" Version="0.3.0" />
+  ```
+
+  ```powershell NuGet Package Manager
+  Install-Package Atulin.Forged
+  ```
+</CodeGroup>
+
+## Requirements
+
+| Requirement | Detail |
+|-------------|--------|
+| .NET version | .NET 10 |
+| C# nullable reference types | Recommended (`<Nullable>enable</Nullable>`) — required to use `.OrNull()` and nullable property types correctly |
+| Roslyn | 4.8 or later (bundled with the .NET 10 SDK) |
+
+Enable nullable reference types in your project file for the best experience:
+
+```xml
+<PropertyGroup>
+  <TargetFramework>net10.0</TargetFramework>
+  <Nullable>enable</Nullable>
+</PropertyGroup>
+```
+
+## How the Package Is Structured
+
+`Atulin.Forged` bundles two assemblies from separate projects into one NuGet package:
+
+<Note>
+  The package places `Forged.Core.dll` under `lib/net10.0` (the standard runtime library path) and `Forged.Generator.dll` under `analyzers/dotnet/roslyn4.8/cs` (the Roslyn analyzer path). MSBuild and the .NET SDK automatically activate analyzers found in that path — no additional `<Analyzer>` item is needed in your project file.
+</Note>
+
+Because the faker class is generated entirely at build time, there is **no runtime overhead** from the generation process itself. The emitted `{Name}Faker` class is plain C# — the compiler sees it the same as hand-written code. This also means Forged is fully compatible with **Native AOT** compilation and **IL trimming**: there is no reflection, no `dynamic`, and no runtime code generation.
+
+## Verifying the Setup
+
+After adding the package reference, create a minimal test to confirm the generator is active. Add a class annotated with `[Fake]` and build the project:
+
+```csharp
+using Forged.Core;
+
+namespace MyProject;
+
+[Fake]
+public class Widget
+{
+    public required string Name { get; set; }
+    public int Quantity { get; set; }
+}
+```
+
+After a successful build, the type `WidgetFaker` will be available in the same namespace. Instantiate it and call `Get()`:
+
+```csharp
+using Forged.Core.Generators.Text;
+
+var faker = new WidgetFaker
+{
+    Name = f => f.Text.Alphanumeric(8),
+    // Quantity is not required, so it can be omitted
+};
+
+var widget = faker.Get();
+```
+
+If the `WidgetFaker` type is not recognised by your IDE, trigger a build (`dotnet build`) — the type appears only after the source generator runs. Most IDEs refresh IntelliSense automatically, but a manual rebuild resolves any lingering "type not found" errors.
+
+<Warning>
+  The source generator only processes `class` and `record` types. Applying `[Fake]` to a `struct` will compile without error (the attribute's `AttributeTargets` permits structs), but the generator will **not** emit a faker for it — no `{Name}Faker` class will be produced. Use a `class` or `record` instead.
+</Warning>

@@ -1,0 +1,132 @@
+---
+title: "Referencing Generated Property Values Across Fields"
+sidebarTitle: "Cross-Property Refs"
+description: "Use Memo() and Func() to share generated values across properties in the same model, such as combining a first and last name into a full name field."
+---
+
+A common requirement when faking models is composing one property's value from another — for example, building a `FullName` field that is the concatenation of an already-generated `FirstName` and `LastName`. In a plain C# object initializer this is straightforward, but inside Forged's lambda-based property configuration each lambda receives its own `Forge` instance (`f`), and the lambda for `FullName` has no way to read what was produced when the `FirstName` lambda ran. Forged solves this problem with two cooperating tools: `Memo()` and `f.Basic.Func()`.
+
+## The Problem with Object Initializer Lambdas
+
+In a standard C# object initializer you cannot use `out var` to capture a value:
+
+```csharp
+// ❌ Does NOT compile — out var is not allowed in object initializers
+var faker = new PersonFaker
+{
+    FirstName = f => f.Text.Pronounceable(1, 3).Capitalize().Memo(out var first),
+    FullName  = f => f.Basic.Func(() => $"{first} ..."), // 'first' not in scope
+};
+```
+
+Each lambda is an independent delegate. There is no shared local scope that spans from one property assignment to another inside `{ }`.
+
+## The Memo Pattern
+
+Forged's solution is a two-part mechanism:
+
+1. **`generator.Memo(out MemoValueGenerator<T> variable)`** — Wraps the generator in a `MemoGenerator<T>` that, every time `.Generate()` is called on the property, stores the produced value in `_currentValue`. It also assigns `variable` to a `MemoValueGenerator<T>` that reads from that cache.
+
+2. **`MemoValueGenerator<T>.Generate()`** — Returns the last value captured by the paired `MemoGenerator<T>`. Because Forged evaluates properties top-to-bottom during a single `Get()` call, by the time a downstream property's lambda runs, the upstream memo has already cached its value.
+
+## Step-by-Step Usage
+
+<Steps>
+  <Step title="Declare the memo variables before the faker">
+    Because `out var` does not work inside object initializers, declare the `MemoValueGenerator<T>` variables in the enclosing scope and use `null!` to satisfy the compiler's definite-assignment rules:
+
+    ```csharp
+    MemoValueGenerator<string> first = null!;
+    MemoValueGenerator<string> last  = null!;
+    ```
+  </Step>
+
+  <Step title="Attach .Memo() to the source properties">
+    Chain `.Memo(out first)` at the end of the generator pipeline for any property whose value you want to reuse. The method returns the same `MemoGenerator<T>`, so it is transparent to the property assignment:
+
+    ```csharp
+    FirstName = f => f.Text.Pronounceable(1, 3).Capitalize().Memo(out first),
+    LastName  = f => f.Text.Pronounceable(1, 3).Capitalize().Memo(out last),
+    ```
+  </Step>
+
+  <Step title="Consume the memoized values with f.Basic.Func()">
+    Use `f.Basic.Func(() => ...)` to wrap a lambda that reads from the `MemoValueGenerator<T>` variables. The lambda is executed fresh on every `Get()` call, at which point the upstream properties have already run and their memos are populated:
+
+    ```csharp
+    FullName = f => f.Basic.Func(() => $"{first} {last}"),
+    ```
+
+    The implicit conversion from `Generator<T>` to `T` (via `operator T`) means `$"{first}"` automatically calls `first.Generate()`, returning the cached string.
+  </Step>
+</Steps>
+
+## Complete Example
+
+The following example is drawn directly from the Forged demo project:
+
+```csharp
+// Declare memo holders outside the initializer (out var restriction)
+MemoValueGenerator<string> first = null!;
+MemoValueGenerator<string> last  = null!;
+
+var faker = new PersonFaker
+{
+    FirstName = f => f.Text
+        .Pronounceable(1, 3)
+        .Capitalize()
+        .Memo(out first),          // cache the generated first name
+
+    LastName = f => f.Text
+        .Pronounceable(1, 3)
+        .Capitalize()
+        .Memo(out last),           // cache the generated last name
+
+    FullName = f => f.Basic
+        .Func(() => $"{first} {last}"), // read both cached values
+};
+
+var person = faker.Get();
+Console.WriteLine(person.FullName); // e.g. "Tivela Moruken"
+```
+
+## How `f.Basic.Func()` Works
+
+`ForgeBasic.Func<T>(Func<T> func)` creates a `FuncGenerator<T>` that invokes the supplied lambda on every `.Generate()` call. This means:
+
+- The lambda captures `first` and `last` by reference (they are local variables).
+- On each `Get()` invocation Forged runs property generators top-to-bottom: `FirstName` → `LastName` → `FullName`.
+- By the time `FullName`'s lambda executes, `first` and `last` already hold the values produced in the current cycle.
+
+```csharp
+// f.Basic.Func signature
+public Generator<T> Func<T>(Func<T> func)
+```
+
+<Note>
+  Forged evaluates property generators in the order they appear in the object initializer — top to bottom. Always place `.Memo()` source properties **above** any property that consumes their `MemoValueGenerator<T>`. If you place `FullName` before `FirstName` in the initializer, `first.Generate()` will return the cached value from the **previous** `Get()` call (or the type default on the very first call).
+</Note>
+
+## Multi-Level Composition
+
+You can chain memos across more than two properties. Each `MemoValueGenerator<T>` is just a generator itself, so it can participate in further pipelines:
+
+```csharp
+MemoValueGenerator<string> first  = null!;
+MemoValueGenerator<string> last   = null!;
+MemoValueGenerator<string> handle = null!;
+
+var faker = new PersonFaker
+{
+    FirstName = f => f.Text.Pronounceable(1, 3).Capitalize().Memo(out first),
+    LastName  = f => f.Text.Pronounceable(1, 3).Capitalize().Memo(out last),
+    Nickname  = f => f.Person.Username().Memo(out handle),
+
+    // Compose all three
+    FullName  = f => f.Basic.Func(() => $"{first} \"{handle}\" {last}"),
+};
+```
+
+<Warning>
+  `MemoValueGenerator<T>.Generate()` returns `memoGenerator.CurrentValue`, which is the value stored by the most recent `MemoGenerator<T>.Generate()` call. If you call it before its paired source property has run (e.g., wrong ordering in the initializer, or outside a `Get()` cycle), you will receive the **default value** for `T` — `null` for reference types, `0` for numeric types, etc. This will not throw; it will silently produce incorrect data.
+</Warning>

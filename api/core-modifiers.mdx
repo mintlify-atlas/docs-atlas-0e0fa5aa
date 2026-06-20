@@ -1,0 +1,256 @@
+---
+title: "Core Generator Modifiers on Generator<T>"
+sidebarTitle: "Core Modifiers"
+description: "Every Generator<T> exposes fluent modifier methods for conditional values, transformations, collection generation, and value memoization."
+---
+
+Every Forged generator inherits from the abstract `Generator<T>` base class, which gives you a rich set of fluent modifier methods out of the box. These methods let you introduce optional values, transform outputs into new types, produce entire collections from a single generator, and capture generated values for reuse — all without breaking the composable pipeline style that Forged is built around.
+
+<Note>
+  `Generator<T>` defines an implicit conversion to `T` that calls `Generate()` under the hood. This means you can assign a generator directly anywhere a `T` is expected, and the value is produced on the spot. All modifier methods return new generator instances — they never mutate the original.
+
+  ```csharp
+  Generator<string> gen = faker.Text.Alpha(5);
+  string value = gen; // implicitly calls gen.Generate()
+  ```
+</Note>
+
+---
+
+## Conditional / fallback
+
+### `.Or(T other, float probability)`
+
+Returns a new generator that produces `other` with the given probability instead of calling the inner generator.
+
+<ParamField path="other" type="T" required>
+  The alternative value to return when the probability condition is met.
+</ParamField>
+
+<ParamField path="probability" type="float" required>
+  A value between `0.0` and `1.0`. At `0.0` the fallback is never returned; at `1.0` it is always returned.
+</ParamField>
+
+**Returns** `Generator<T>`
+
+```csharp
+// 20 % chance the status is "inactive", otherwise any generated status
+Status = f => f.Text.Alpha(8).Or("inactive", 0.2f),
+```
+
+---
+
+### `.OrDefault(float probability)`
+
+Returns a new generator that produces `default(T?)` with the given probability instead of calling the inner generator. Useful for introducing nullable gaps in test data.
+
+<ParamField path="probability" type="float" required>
+  A value between `0.0` and `1.0` representing the chance of returning the default value.
+</ParamField>
+
+**Returns** `Generator<T?>`
+
+```csharp
+// 30 % of generated users have no middle name
+MiddleName = f => f.Text.Alpha(6).OrDefault(0.3f),
+```
+
+---
+
+## Transformation
+
+### `.Refine<TNew>(Func<T, TNew> refiner)`
+
+Applies a transformation function to every generated value, producing a new generator of a different type. This is the fundamental "map" operation in a Forged pipeline.
+
+<ParamField path="refiner" type="Func<T, TNew>" required>
+  A pure function that receives the generated `T` value and returns a `TNew` value.
+</ParamField>
+
+**Returns** `Generator<TNew>`
+
+```csharp
+// Convert a generated integer into an enum value
+Role = f => f.Random.Number<int>(0, 2).Refine(n => (UserRole)n),
+
+// Build a Uri from a generated string
+ProfileUrl = f => f.Internet.Url().Refine(s => new Uri(s)),
+```
+
+---
+
+### `.Cast<TOut>()`
+
+Casts the generated value to `TOut`. Returns a `LiteralGenerator` wrapping the result of a single `Generate()` call. Returns `null` if the runtime cast is not possible.
+
+**Returns** `IGenerator<TOut?>`
+
+<Note>
+  `Cast<TOut>` eagerly calls `Generate()` once at construction time; the resulting `IGenerator<TOut?>` always produces that same captured value. For lazy casts, prefer `.Refine(x => (TOut?)x)`.
+</Note>
+
+```csharp
+IGenerator<Animal?> animal = f.Pets.Dog().Cast<Animal>();
+```
+
+---
+
+## Collection factories
+
+All collection factory methods are built on the same `EnumerableGenerator<T>` infrastructure. The overloads accepting both `min` and `max` pick a random length in that inclusive range on every `Generate()` call.
+
+### `.Enumerable(int length)` and `.Enumerable(int min, int max)`
+
+<ParamField path="length" type="int" required>
+  The exact number of elements to generate.
+</ParamField>
+
+<ParamField path="min" type="int" required>
+  The minimum number of elements (inclusive).
+</ParamField>
+
+<ParamField path="max" type="int" required>
+  The maximum number of elements (inclusive).
+</ParamField>
+
+**Returns** `Generator<IEnumerable<T>>`
+
+```csharp
+Tags = f => f.Text.Word().Enumerable(3, 8),
+```
+
+---
+
+### `.Array(int length)` and `.Array(int min, int max)`
+
+<ParamField path="length" type="int" required>
+  The exact number of elements to generate.
+</ParamField>
+
+<ParamField path="min" type="int" required>
+  The minimum number of elements (inclusive).
+</ParamField>
+
+<ParamField path="max" type="int" required>
+  The maximum number of elements (inclusive).
+</ParamField>
+
+**Returns** `Generator<T[]>`
+
+```csharp
+Scores = f => f.Random.Number<int>(0, 100).Array(5),
+```
+
+---
+
+### `.List(int length)` and `.List(int min, int max)`
+
+<ParamField path="length" type="int" required>
+  The exact number of elements to generate.
+</ParamField>
+
+<ParamField path="min" type="int" required>
+  The minimum number of elements (inclusive).
+</ParamField>
+
+<ParamField path="max" type="int" required>
+  The maximum number of elements (inclusive).
+</ParamField>
+
+**Returns** `Generator<List<T>>`
+
+```csharp
+Friends = f => f.Person.FullName().List(0, 10),
+```
+
+---
+
+### `.HashSet(int length)` and `.HashSet(int min, int max)`
+
+<ParamField path="length" type="int" required>
+  The exact number of elements to generate.
+</ParamField>
+
+<ParamField path="min" type="int" required>
+  The minimum number of elements (inclusive).
+</ParamField>
+
+<ParamField path="max" type="int" required>
+  The maximum number of elements (inclusive).
+</ParamField>
+
+**Returns** `Generator<HashSet<T>>`
+
+<Note>
+  Because `HashSet<T>` deduplicates elements, the actual number of items in the set may be less than the requested length if the inner generator produces duplicate values.
+</Note>
+
+```csharp
+Permissions = f => f.Text.Alpha(4).ToUpper().HashSet(3, 6),
+```
+
+---
+
+## Memoization
+
+### `.Memo(out MemoValueGenerator<T> memoizedValue)`
+
+Captures the value produced by the current generator so it can be referenced elsewhere in the same faker configuration. Calling `.Memo()` returns a `MemoGenerator<T>` that, when generated, stores its output in an internal field. The `out` parameter provides a companion `MemoValueGenerator<T>` that always returns that same stored value without re-running the inner generator.
+
+<ParamField path="memoizedValue" type="MemoValueGenerator<T>" required>
+  An `out` parameter that receives the companion reader generator. Assign this to a field or local variable and reference it in other properties of the same faker.
+</ParamField>
+
+**Returns** `MemoGenerator<T>` — a generator that both produces the value and caches it for the companion to read.
+
+<Tip>
+  Use `.Memo()` whenever two properties on the same generated object must share the same randomly produced value — for example, linking a `CreatedAt` date to a `UpdatedAt` date that must be later.
+</Tip>
+
+```csharp
+var faker = new Faker<Order>()
+    .Property(o => o.CreatedAt,  f => f.Temporal.Past().Memo(out var createdAt).ToUtc())
+    .Property(o => o.UpdatedAt,  f => f.Temporal.Future(createdAt).ToUtc());
+```
+
+In this example `createdAt` is a `MemoValueGenerator<DateTime>`. Every time an `Order` is generated, `CreatedAt` is picked first, stored in the memo, then `UpdatedAt` uses it as a lower bound.
+
+---
+
+## String conversion (from `GeneratorExtensions`)
+
+These two methods are defined as static extension methods in `GeneratorExtensions` and are available on any `Generator<T>`.
+
+### `.ToString()`
+
+Calls `.ToString()` on each generated value using the default `object.ToString()` implementation.
+
+**Returns** `Generator<string?>` — the result is nullable because `object.ToString()` can theoretically return `null`.
+
+```csharp
+Label = f => f.Random.Number<int>(1, 99).ToString(),
+```
+
+---
+
+### `.ToString(string format, CultureInfo? cultureInfo)`
+
+Formats each generated value using the supplied format string. Only available when `T` implements `ISpanFormattable` (e.g. `DateTime`, `int`, `double`, `Guid`, …).
+
+<ParamField path="format" type="string" required>
+  A standard or custom format string accepted by `ISpanFormattable.ToString`.
+</ParamField>
+
+<ParamField path="cultureInfo" type="CultureInfo?" required={false}>
+  The culture to use for formatting. Defaults to the generator's `Forge` locale when `null`.
+</ParamField>
+
+**Returns** `Generator<string>` — always non-null.
+
+```csharp
+// ISO 8601 date string
+DateString = f => f.Temporal.Past().ToString("yyyy-MM-dd"),
+
+// Formatted price
+PriceTag = f => f.Random.Number<double>(1.0, 999.99).ToString("C2", CultureInfo.GetCultureInfo("en-US")),
+```

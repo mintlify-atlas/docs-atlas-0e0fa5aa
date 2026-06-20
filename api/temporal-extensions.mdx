@@ -1,0 +1,123 @@
+---
+title: "DateTime Generator Extension Methods"
+sidebarTitle: "Temporal Extensions"
+description: "Extension methods on Generator<DateTime> for timezone conversion, date/time extraction, and date truncation — chain them after any temporal generator."
+---
+
+Forged's temporal extension methods let you post-process any `Generator<DateTime>` without reaching for `.Refine()` by hand. They are declared in `DateTimeGeneratorExtensions` using the C# 14 `extension` member syntax and cover the four most common tasks when shaping date-time data: normalising the `DateTimeKind`, extracting only the date or time component, and stripping the time portion entirely.
+
+<Note>
+  These extensions are defined on `Generator<DateTime>` specifically. They are **not** available on `Generator<DateTimeOffset>`, `Generator<DateOnly>`, or `Generator<TimeOnly>`. Use `.Refine()` for those types.
+</Note>
+
+---
+
+## Timezone / kind normalisation
+
+### `.ToUtc()`
+
+Marks the generated `DateTime` as UTC by applying `DateTime.SpecifyKind(value, DateTimeKind.Utc)`. The date and time components are not shifted — only the `Kind` property changes.
+
+**Returns** `Generator<DateTime>`
+
+```csharp
+CreatedAt = f => f.Temporal.Past().ToUtc(),
+```
+
+---
+
+### `.ToLocal()`
+
+Marks the generated `DateTime` as local time by applying `DateTime.SpecifyKind(value, DateTimeKind.Local)`. As with `.ToUtc()`, the numeric date/time values are unchanged.
+
+**Returns** `Generator<DateTime>`
+
+```csharp
+LastLoginAt = f => f.Temporal.Recent(30).ToLocal(),
+```
+
+---
+
+## Component extraction
+
+### `.ToDateOnly()`
+
+Extracts only the date portion of the generated `DateTime` via `DateOnly.FromDateTime(value)`, discarding all time-of-day information.
+
+**Returns** `Generator<DateOnly>`
+
+```csharp
+BirthDate = f => f.Temporal.Past(DateTime.Now.AddYears(-80)).ToDateOnly(),
+```
+
+---
+
+### `.ToTimeOnly()`
+
+Extracts only the time-of-day portion of the generated `DateTime` via `TimeOnly.FromDateTime(value)`, discarding the date.
+
+**Returns** `Generator<TimeOnly>`
+
+```csharp
+AppointmentTime = f => f.Temporal.Between(
+    DateTime.Today,
+    DateTime.Today.AddHours(23)
+).ToTimeOnly(),
+```
+
+---
+
+## Truncation
+
+### `.TruncateToDate()`
+
+Returns a `DateTime` whose time component is set to midnight (`00:00:00.000`) by reading the `.Date` property of the generated value. The `DateTimeKind` of the original value is preserved.
+
+**Returns** `Generator<DateTime>`
+
+```csharp
+StartOfDay = f => f.Temporal.Between(
+    DateTime.Now.AddDays(-7),
+    DateTime.Now
+).TruncateToDate(),
+```
+
+---
+
+## Combining extensions
+
+Temporal extensions return a new `Generator<DateTime>` (or `Generator<DateOnly>` / `Generator<TimeOnly>`) and can be chained with any other modifier in the pipeline.
+
+<CodeGroup>
+
+```csharp UTC timestamp
+CreatedAt = f => f.Temporal.Past().ToUtc(),
+```
+
+```csharp Date-only birth date
+BirthDate = f => f.Temporal.Past(DateTime.Now.AddYears(-80)).ToDateOnly(),
+```
+
+```csharp Midnight boundary
+StartOfDay = f => f.Temporal.Between(
+    DateTime.Now.AddDays(-30),
+    DateTime.Now
+).TruncateToDate(),
+```
+
+```csharp Formatted UTC string
+CreatedAtString = f => f.Temporal.Past().ToUtc()
+    .ToString("yyyy-MM-ddTHH:mm:ssZ"),
+```
+
+</CodeGroup>
+
+<Tip>
+  To produce a nullable date — for example an optional `DeletedAt` column — chain `.OrDefault(probability)` after a temporal extension:
+
+  ```csharp
+  DeletedAt = f => f.Temporal.Past().ToUtc().OrDefault(0.8f),
+  ```
+
+  This yields a non-null UTC `DateTime` 20 % of the time and `null` 80 % of the time.
+</Tip>

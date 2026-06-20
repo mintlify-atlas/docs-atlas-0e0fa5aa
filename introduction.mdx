@@ -1,0 +1,85 @@
+---
+title: "Forged: Strongly-Typed C# Fake Data Generator"
+sidebarTitle: "Introduction"
+description: "Forged uses Roslyn Source Generators to create compile-time-checked fakers for your C# models, enforcing required properties, nullability, and type safety."
+---
+
+Forged is a fast, strict, and strongly-typed fake data generator for C# that leverages Roslyn Source Generators to eliminate the guesswork from test data creation. Unlike reflection-based fakers — which discover your model's shape at runtime and can silently skip required properties or assign values of the wrong type — Forged generates a dedicated `{ModelName}Faker` class at compile time. This means the compiler itself enforces that every `required` property has a generator configured, that nullability contracts are respected, and that all types match exactly. If your test data setup is wrong, you find out during the build, not during a test run.
+
+<CardGroup cols={2}>
+  <Card title="Source Generated" icon="bolt">
+    The faker class for your model is emitted by a Roslyn Source Generator at build time. There is no reflection at runtime, making Forged fully compatible with ahead-of-time (AOT) compilation and trimming.
+  </Card>
+  <Card title="Strict & Type-Safe" icon="shield-check">
+    Every public, settable property on your model becomes a strongly-typed property on the faker. If a model property is `required`, the corresponding faker property is also `required` — the compiler rejects incomplete configurations.
+  </Card>
+  <Card title="Fluent API" icon="water">
+    Generators are composed through a clean, chainable fluent API. You can transform, filter, combine, and collect generated values using readable pipelines without any magic strings or reflection.
+  </Card>
+  <Card title="Deterministic" icon="dice">
+    Pass a seeded `Random` instance to the faker constructor to reproduce the exact same sequence of fake values every time — ideal for snapshot tests, reproducible CI failures, and data-driven scenarios.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+The core workflow has three steps: annotate your model, let the generator produce a faker class, then configure and call it.
+
+**1. Annotate your model** with `[Fake]` from the `Forged.Core` namespace:
+
+```csharp
+using Forged.Core;
+
+namespace MyProject;
+
+[Fake]
+public class Person
+{
+    public required Guid Id { get; set; }
+    public required string FirstName { get; set; }
+    public required string LastName { get; set; }
+    public List<string>? MiddleNames { get; set; }
+    public bool IsActive { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+}
+```
+
+**2. Build your project.** The Roslyn Source Generator automatically emits a `PersonFaker` class (saved as `PersonFaker.g.cs` in your build output). You never write or maintain this file — it is regenerated whenever your model changes.
+
+**3. Configure the faker and call `Get()`** to produce fake instances:
+
+```csharp
+using Forged.Core.Generators.Text;
+
+var faker = new PersonFaker
+{
+    Id          = f => f.Text.Guid(GuidGenerator.Kind.V7),
+    FirstName   = f => f.Text.Alphanumeric(10),
+    LastName    = f => f.Text.Alphanumeric(10),
+    MiddleNames = f => f.Text.Alphanumeric(5).List(0, 3),
+    DateOfBirth = f => f.Temporal.Past().OrNull(0.2f),
+    IsActive    = f => f.Random.Pick(true, false),
+};
+
+// Generate a single fake Person
+var person = faker.Get();
+
+// Generate five fake Persons
+var people = faker.Get(5);
+```
+
+The `f` parameter in each lambda is a `Forge` instance — the root object that exposes all generator modules (`f.Text`, `f.Temporal`, `f.Random`, `f.Basic`, `f.Person`). Each module returns a `Generator<T>` that you can chain with fluent modifiers before handing it back to the faker.
+
+<Note>
+  Properties marked `required` on your model are also marked `required` on the generated faker. Omitting a generator for any required property is a **compile-time error**, not a runtime surprise. Optional (non-required) faker properties can be left `null` — their model properties will receive `default` when `Get()` is called.
+</Note>
+
+## Package Information
+
+| Detail | Value |
+|--------|-------|
+| NuGet package | `Atulin.Forged` |
+| Current version | `0.3.0` |
+| Target framework | .NET 10 |
+| License | MIT |
+| Repository | [github.com/Atulin/Forged](https://github.com/Atulin/Forged) |

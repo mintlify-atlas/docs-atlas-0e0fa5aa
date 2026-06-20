@@ -1,0 +1,149 @@
+---
+title: "Faker<T>: The Generated Model Builder"
+sidebarTitle: "Faker Class"
+description: "Each annotated model gets a generated Faker<T> subclass that wires together generator lambdas and produces model instances via Get()."
+---
+
+Every type decorated with `[Fake]` gets a compile-time-generated subclass of `Faker<TModel>`. This subclass exposes one lambda property per public settable property on your model, and provides a `Get()` method that invokes those lambdas to produce fully populated instances. You configure the faker once by supplying generator lambdas, then call `Get()` as many times as you need.
+
+## The `Faker<TModel>` base class
+
+`Faker<TModel>` is an abstract generic class defined in `Forged.Core`. The generated subclass inherits from it automatically — you never write the inheritance yourself.
+
+```csharp
+public abstract class Faker<TModel>(Random? random = null, CultureInfo? locale = null)
+{
+    public Forge Forge { get; }
+
+    public abstract TModel Get();
+    public IEnumerable<TModel> Get(int count);
+    public IEnumerable<TModel> Get(int min, int max);
+}
+```
+
+The constructor accepts two optional parameters:
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `random` | `null` | Passed to the internal `Forge`; falls back to `Random.Shared` when null |
+| `locale` | `null` | Passed to the internal `Forge`; falls back to `CultureInfo.InvariantCulture` when null |
+
+The `Forge` property exposes the `Forge` instance that the faker creates from those arguments. All generator lambdas receive this same `Forge` instance as their `f` parameter.
+
+## The three `Get` overloads
+
+```csharp
+// Returns a single model instance
+TModel Get();
+
+// Returns exactly `count` instances as a lazy IEnumerable<TModel>
+IEnumerable<TModel> Get(int count);
+
+// Returns a random number of instances between `min` (inclusive) and `max` (exclusive)
+IEnumerable<TModel> Get(int min, int max);
+```
+
+The ranged overload uses `Forge.Rng.Next(min, max)` to pick the count, so the actual number of items produced varies between calls.
+
+## Generator lambda caching
+
+Each lambda property has a backing private field (e.g. `_idGenerator`). The generated `Get()` implementation uses the `??=` pattern to invoke a lambda only once per faker lifetime and cache the resulting `IGenerator<T>`:
+
+```csharp
+public override Person Get()
+{
+    _idGenerator        ??= Id(this.Forge);
+    _firstNameGenerator ??= FirstName(this.Forge);
+    // ...
+
+    return new Person
+    {
+        Id        = _idGenerator.Generate(),
+        FirstName = _firstNameGenerator.Generate(),
+        // ...
+    };
+}
+```
+
+This means:
+- Lambdas are evaluated **once** on the first call to `Get()`.
+- Subsequent calls reuse the same generator instances — keeping any internal state (e.g. memo caches) intact across the lifetime of the faker.
+
+## Complete example
+
+The demo application configures `PersonFaker` with a full set of generator lambdas using real Forged modules:
+
+```csharp
+using Forged.Core.Generators.Extensions;
+using Forged.Core.Generators.Text;
+using Forged.Core.Generators.Utility;
+using Forged.Demo;
+
+// out var cannot be used inside object initializers, so declare memo receivers up front
+MemoValueGenerator<string> first = null!;
+MemoValueGenerator<string> last  = null!;
+
+var faker = new PersonFaker
+{
+    // Generate a random GUID v7
+    Id = f => f.Text
+        .Guid(GuidGenerator.Kind.V7),
+
+    // Generate a pronounceable first name and capture it for reuse
+    FirstName = f => f.Text
+        .Pronounceable(1, 3)
+        .Capitalize()
+        .Memo(out first),
+
+    // Generate a last name with an optional "Von" prefix
+    LastName = f => f.Text
+        .Pronounceable(1, 3)
+        .ToLower()
+        .Capitalize()
+        .Array(1, 2)
+        .Refine(x => string.Join("-", x))
+        .Refine(x => f.Random.CoinToss() ? $"Von {x}" : x)
+        .Memo(out last),
+
+    // Combine the memoized first and last names
+    FullName = f => f.Basic.Func(() => $"{first} {last}"),
+
+    // Generate 0–3 random middle names
+    MiddleNames = f => f.Text
+        .Alpha(3, 5)
+        .ToLower()
+        .Capitalize()
+        .List(0, 3),
+
+    // 20% chance of a null nickname
+    Nickname = f => f.Person
+        .Username()
+        .OrDefault(.2f),
+
+    // Date of birth between 18 and 80 years ago, nullable
+    DateOfBirth = f => f.Temporal
+        .Between(DateTime.Now.AddYears(-80), DateTime.Now.AddYears(-18))
+        .Nullable(),
+
+    // Random boolean
+    IsActive = f => f.Random
+        .Pick(true, false),
+
+    // Random biographical text (3–6 sentences)
+    Bio = f => f.Text
+        .Waffle(f.Random.Number<int>(3, 6), WaffleStyle.Fiction)
+};
+
+// Produce five people
+var people = faker.Get(5);
+```
+
+<Tip>
+  To make two fakers share the same RNG state — for example, to produce deterministic test fixtures — pass the same seeded `Random` instance to both constructors:
+
+  ```csharp
+  var rng = new Random(42);
+  var userFaker  = new UserFaker(random: rng);
+  var orderFaker = new OrderFaker(random: rng);
+  ```
+</Tip>

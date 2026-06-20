@@ -1,0 +1,331 @@
+---
+title: "ForgeTemporal: Date and Time Generators"
+sidebarTitle: "Temporal"
+description: "ForgeTemporal (f.Temporal) provides generators for DateTime, DateOnly, TimeOnly, DateTimeOffset, and TimeSpan values with configurable ranges."
+---
+
+`ForgeTemporal` groups all date and time generation under the `f.Temporal` accessor. It covers all five temporal types in modern .NET — `DateTime`, `DateOnly`, `TimeOnly`, `DateTimeOffset`, and `TimeSpan` — and provides _between_, _past_, and _future_ variants where applicable so you can express temporal intent directly without manually computing bounds. When a boundary is omitted (passed as `null`), the method falls back to a sensible default: `Past` and `Future` methods default to a one-year window relative to `UtcNow`, while unconstrained `Between` methods fall back to the type's absolute `MinValue` / `MaxValue`.
+
+> **Note on `DateTime` kind** — all generated `DateTime` values use `DateTimeKind.Utc`. Similarly, all `DateTimeOffset` values are generated with a UTC offset of `TimeSpan.Zero`.
+
+---
+
+## Between
+
+Produces a random `DateTime` anywhere within the supplied `[min, max]` window.
+
+```csharp
+public Generator<DateTime> Between(DateTime? min = null, DateTime? max = null)
+```
+
+<ParamField path="min" type="DateTime?" required={false}>
+  The earliest possible value (inclusive). Defaults to `DateTime.MinValue` when `null`.
+</ParamField>
+
+<ParamField path="max" type="DateTime?" required={false}>
+  The latest possible value (inclusive). Defaults to `DateTime.MaxValue` when `null`.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateTime>">
+  A random `DateTime` (UTC) within the specified range.
+</ResponseField>
+
+**Example**
+
+```csharp
+CreatedAt = f => f.Temporal.Between(
+    new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+    new DateTime(2024, 12, 31, 23, 59, 59, DateTimeKind.Utc)
+),
+```
+
+---
+
+## Past
+
+Produces a random `DateTime` between `earliest` and `DateTime.UtcNow`.
+
+```csharp
+public Generator<DateTime> Past(DateTime? earliest = null)
+```
+
+<ParamField path="earliest" type="DateTime?" required={false}>
+  The lower bound of the generated range. When `null`, defaults to approximately one
+  year before the current UTC time.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateTime>">
+  A random `DateTime` (UTC) no later than the moment the value is generated.
+</ResponseField>
+
+**Example**
+
+```csharp
+// Any date within the past year
+LastLoginAt = f => f.Temporal.Past(),
+
+// Any date since the system launch
+RegistrationDate = f => f.Temporal.Past(
+    earliest: new DateTime(2019, 6, 1, 0, 0, 0, DateTimeKind.Utc)
+),
+```
+
+---
+
+## Future
+
+Produces a random `DateTime` between `DateTime.UtcNow` and `latest`.
+
+```csharp
+public Generator<DateTime> Future(DateTime? latest = null)
+```
+
+<ParamField path="latest" type="DateTime?" required={false}>
+  The upper bound of the generated range. When `null`, defaults to approximately one
+  year after the current UTC time.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateTime>">
+  A random `DateTime` (UTC) no earlier than the moment the value is generated.
+</ResponseField>
+
+**Example**
+
+```csharp
+ExpiresAt      = f => f.Temporal.Future(),
+ScheduledUntil = f => f.Temporal.Future(
+    latest: new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+),
+```
+
+---
+
+## DateBetween
+
+Produces a random `DateOnly` within a `[min, max]` range (no time component).
+
+```csharp
+public Generator<DateOnly> DateBetween(DateOnly? min = null, DateOnly? max = null)
+```
+
+<ParamField path="min" type="DateOnly?" required={false}>
+  The earliest date (inclusive). Defaults to `DateOnly.MinValue` when `null`.
+</ParamField>
+
+<ParamField path="max" type="DateOnly?" required={false}>
+  The latest date (inclusive). Defaults to `DateOnly.MaxValue` when `null`.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateOnly>">
+  A random `DateOnly` within the specified range.
+</ResponseField>
+
+**Example**
+
+```csharp
+BirthDate = f => f.Temporal.DateBetween(
+    new DateOnly(1950, 1, 1),
+    new DateOnly(2005, 12, 31)
+),
+```
+
+---
+
+## DateInPast
+
+Produces a random `DateOnly` between `earliest` and today's UTC date.
+
+```csharp
+public Generator<DateOnly> DateInPast(DateOnly? earliest = null)
+```
+
+<ParamField path="earliest" type="DateOnly?" required={false}>
+  The lower date bound. When `null`, defaults to approximately one year before today.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateOnly>">
+  A random past `DateOnly` no later than today's UTC date.
+</ResponseField>
+
+**Example**
+
+```csharp
+InvoiceDate  = f => f.Temporal.DateInPast(),
+ContractDate = f => f.Temporal.DateInPast(new DateOnly(2022, 1, 1)),
+```
+
+---
+
+## DateInFuture
+
+Produces a random `DateOnly` from today's UTC date up to `latest`.
+
+```csharp
+public Generator<DateOnly> DateInFuture(DateOnly? latest = null)
+```
+
+<ParamField path="latest" type="DateOnly?" required={false}>
+  The upper date bound. When `null`, defaults to approximately one year from today.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateOnly>">
+  A random future `DateOnly` no earlier than today's UTC date.
+</ResponseField>
+
+**Example**
+
+```csharp
+RenewalDate  = f => f.Temporal.DateInFuture(),
+DeadlineDate = f => f.Temporal.DateInFuture(new DateOnly(2027, 12, 31)),
+```
+
+---
+
+## TimeBetween
+
+Produces a random `TimeOnly` within a `[min, max]` range.
+
+```csharp
+public Generator<TimeOnly> TimeBetween(TimeOnly? min = null, TimeOnly? max = null)
+```
+
+<ParamField path="min" type="TimeOnly?" required={false}>
+  The earliest time (inclusive). Defaults to `TimeOnly.MinValue` (`00:00:00`) when `null`.
+</ParamField>
+
+<ParamField path="max" type="TimeOnly?" required={false}>
+  The latest time (inclusive). Defaults to `TimeOnly.MaxValue` (`23:59:59.9999999`) when `null`.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<TimeOnly>">
+  A random `TimeOnly` within the specified range.
+</ResponseField>
+
+**Example**
+
+```csharp
+// Business hours only
+AppointmentTime = f => f.Temporal.TimeBetween(
+    new TimeOnly(9, 0),
+    new TimeOnly(17, 0)
+),
+```
+
+---
+
+## DateTimeOffsetBetween
+
+Produces a random `DateTimeOffset` within a `[min, max]` window. Generated values always carry a UTC offset of `TimeSpan.Zero`.
+
+```csharp
+public Generator<DateTimeOffset> DateTimeOffsetBetween(DateTimeOffset? min = null, DateTimeOffset? max = null)
+```
+
+<ParamField path="min" type="DateTimeOffset?" required={false}>
+  The earliest offset date/time (inclusive). Defaults to `DateTimeOffset.MinValue` when `null`.
+</ParamField>
+
+<ParamField path="max" type="DateTimeOffset?" required={false}>
+  The latest offset date/time (inclusive). Defaults to `DateTimeOffset.MaxValue` when `null`.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateTimeOffset>">
+  A random `DateTimeOffset` (UTC offset zero) within the specified range.
+</ResponseField>
+
+**Example**
+
+```csharp
+EventTimestamp = f => f.Temporal.DateTimeOffsetBetween(
+    DateTimeOffset.UtcNow.AddYears(-2),
+    DateTimeOffset.UtcNow
+),
+```
+
+---
+
+## DateTimeOffsetInPast
+
+Produces a random `DateTimeOffset` between `earliest` and `DateTimeOffset.UtcNow`.
+
+```csharp
+public Generator<DateTimeOffset> DateTimeOffsetInPast(DateTimeOffset? earliest = null)
+```
+
+<ParamField path="earliest" type="DateTimeOffset?" required={false}>
+  Lower bound of the range. When `null`, defaults to approximately one year before now.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateTimeOffset>">
+  A random past `DateTimeOffset` (UTC) no later than the current moment.
+</ResponseField>
+
+**Example**
+
+```csharp
+AuditTimestamp = f => f.Temporal.DateTimeOffsetInPast(),
+```
+
+---
+
+## DateTimeOffsetInFuture
+
+Produces a random `DateTimeOffset` between `DateTimeOffset.UtcNow` and `latest`.
+
+```csharp
+public Generator<DateTimeOffset> DateTimeOffsetInFuture(DateTimeOffset? latest = null)
+```
+
+<ParamField path="latest" type="DateTimeOffset?" required={false}>
+  Upper bound of the range. When `null`, defaults to approximately one year from now.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<DateTimeOffset>">
+  A random future `DateTimeOffset` (UTC) no earlier than the current moment.
+</ResponseField>
+
+**Example**
+
+```csharp
+TokenExpiry = f => f.Temporal.DateTimeOffsetInFuture(),
+```
+
+---
+
+## TimeSpanBetween
+
+Produces a random `TimeSpan` duration within a `[min, max]` range.
+
+```csharp
+public Generator<TimeSpan> TimeSpanBetween(TimeSpan? min = null, TimeSpan? max = null)
+```
+
+<ParamField path="min" type="TimeSpan?" required={false}>
+  The shortest duration (inclusive). Defaults to `TimeSpan.MinValue` when `null`.
+</ParamField>
+
+<ParamField path="max" type="TimeSpan?" required={false}>
+  The longest duration (inclusive). Defaults to `TimeSpan.MaxValue` when `null`.
+</ParamField>
+
+<ResponseField name="returns" type="Generator<TimeSpan>">
+  A random `TimeSpan` within the specified range.
+</ResponseField>
+
+<CodeGroup>
+
+```csharp Session duration (1 minute to 2 hours)
+SessionDuration = f => f.Temporal.TimeSpanBetween(
+    TimeSpan.FromMinutes(1),
+    TimeSpan.FromHours(2)
+),
+```
+
+```csharp Cache TTL (5 to 60 seconds)
+CacheTtl = f => f.Temporal.TimeSpanBetween(
+    TimeSpan.FromSeconds(5),
+    TimeSpan.FromSeconds(60)
+),
+```
+
+</CodeGroup>
