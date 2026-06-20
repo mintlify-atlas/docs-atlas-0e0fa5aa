@@ -1,7 +1,7 @@
 ---
-title: "Handling Nullable and Optional Property Values"
+title: "Handling Nullable and Optional Values in Forged Fakers"
 sidebarTitle: "Nullable Values"
-description: "Use OrNull(), Nullable(), OrDefault(), and Or() to generate nullable reference types, nullable value types, and optional fields with configurable probability."
+description: "Use OrNull(), Nullable(), OrDefault(), and Or() to control null probability for value types, reference types, and optional fields in Forged."
 ---
 
 C# distinguishes sharply between nullable reference types (e.g., `string?`) and nullable value types (e.g., `DateTime?`, `int?`). Forged mirrors this distinction with separate extension methods for each case, letting you introduce null or alternative values into any generator pipeline with a single fluent call and a probability float.

@@ -1,7 +1,7 @@
 ---
-title: "ForgeBasic: Literal and Function Generators"
+title: "ForgeBasic: Literal Values and Function Generators"
 sidebarTitle: "Basic"
-description: "ForgeBasic (f.Basic) provides two fundamental generators: Literal for constant values and Func for custom lambdas."
+description: "ForgeBasic (f.Basic) provides two foundational generators: Literal<T> for fixed constant values and Func<T> for delegate-based custom lambdas."
 ---
 
 `ForgeBasic` is the foundation of the Forged generator system. Accessed via `f.Basic`, it exposes two complementary primitives: a **literal** generator that always returns the same fixed value, and a **function** generator that delegates to a caller-supplied lambda each time a value is needed. These are particularly useful when you need deterministic fields in an otherwise random data set, or when you want to integrate custom logic — external service calls, computed values, counters — into a Forged configuration.

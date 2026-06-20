@@ -1,5 +1,5 @@
 ---
-title: "Faker<T>: The Generated Model Builder"
+title: "Faker<T>: The Abstract Base for Generated Model Builders"
 sidebarTitle: "Faker Class"
 description: "Each annotated model gets a generated Faker<T> subclass that wires together generator lambdas and produces model instances via Get()."
 ---
@@ -29,6 +29,10 @@ The constructor accepts two optional parameters:
 | `locale` | `null` | Passed to the internal `Forge`; falls back to `CultureInfo.InvariantCulture` when null |
 
 The `Forge` property exposes the `Forge` instance that the faker creates from those arguments. All generator lambdas receive this same `Forge` instance as their `f` parameter.
+
+<Note>
+  The source-generated subclass constructor only exposes the `random` parameter — it does **not** surface `locale`. The emitted signature is always `public {Name}Faker(Random? random = null) : base(random) { }`. If you need a non-default locale, subclass `Faker<TModel>` manually and pass your `CultureInfo` to `base(random, locale)`.
+</Note>
 
 ## The three `Get` overloads
 

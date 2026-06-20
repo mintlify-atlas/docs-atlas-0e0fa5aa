@@ -1,5 +1,5 @@
 ---
-title: "Installing Forged in Your .NET Project"
+title: "Installing Forged: Add Atulin.Forged to Your .NET Project"
 sidebarTitle: "Installation"
 description: "Add the Atulin.Forged NuGet package to any .NET 10 project. The package includes both the runtime library and the Roslyn source generator."
 ---
@@ -44,7 +44,7 @@ Enable nullable reference types in your project file for the best experience:
 `Atulin.Forged` bundles two assemblies from separate projects into one NuGet package:
 
 <Note>
-  The package places `Forged.Core.dll` under `lib/net10.0` (the standard runtime library path) and `Forged.Generator.dll` under `analyzers/dotnet/roslyn4.8/cs` (the Roslyn analyzer path). MSBuild and the .NET SDK automatically activate analyzers found in that path — no additional `<Analyzer>` item is needed in your project file.
+  The package places `Forged.Core.dll` under `lib/$(TargetFramework)` (the standard runtime library path) and `Forged.Generator.dll` under `analyzers/dotnet/roslyn4.8/cs` (the Roslyn analyzer path). MSBuild and the .NET SDK automatically activate analyzers found in that path — no additional `<Analyzer>` item is needed in your project file.
 </Note>
 
 Because the faker class is generated entirely at build time, there is **no runtime overhead** from the generation process itself. The emitted `{Name}Faker` class is plain C# — the compiler sees it the same as hand-written code. This also means Forged is fully compatible with **Native AOT** compilation and **IL trimming**: there is no reflection, no `dynamic`, and no runtime code generation.

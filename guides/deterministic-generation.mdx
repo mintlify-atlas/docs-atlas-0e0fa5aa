@@ -1,5 +1,5 @@
 ---
-title: "Deterministic Generation with Seeded Random"
+title: "Deterministic Generation with a Seeded Random in Forged"
 sidebarTitle: "Deterministic Output"
 description: "Pass a seeded Random instance to any Forged faker to produce reproducible datasets — ideal for unit tests, snapshot tests, and debugging."
 ---
@@ -54,11 +54,26 @@ If `random` is `null` (the default), Forged falls back to `Random.Shared`, which
   </Tab>
 </Tabs>
 
-## Setting a Locale Alongside a Seed
+## Setting a Locale
 
-The second constructor parameter, `locale`, controls culture-sensitive formatting (e.g., title casing, date formatting). You can combine both a seed and a locale:
+The `Faker<T>` base class accepts an optional `locale` parameter for culture-sensitive formatting (e.g., title casing, date formatting). However, the source-generated constructor — emitted by the Forged Source Generator — only exposes the `Random` parameter:
 
 ```csharp
+// Generated constructor (source-generator output):
+public PersonFaker(Random? random = null) : base(random) { }
+```
+
+To use a non-default locale, write a partial class that adds your own constructor and passes the locale to `base`:
+
+```csharp
+// In your own code — NOT generated
+public partial class PersonFaker
+{
+    public PersonFaker(Random? random, CultureInfo? locale)
+        : base(random, locale) { }
+}
+
+// Usage
 var faker = new PersonFaker(new Random(42), CultureInfo.GetCultureInfo("en-US"))
 {
     Id        = f => f.Text.Guid(GuidGenerator.Kind.V7),

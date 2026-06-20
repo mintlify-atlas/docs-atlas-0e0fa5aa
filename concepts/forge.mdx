@@ -1,7 +1,7 @@
 ---
-title: "Forge: The Generator Module Registry"
+title: "Forge: Central Registry for Built-in Generator Modules"
 sidebarTitle: "Forge"
-description: "The Forge class is the central access point for all built-in generator modules: Basic, Random, Temporal, Text, and Person."
+description: "The Forge class owns the shared RNG and locale and exposes the five built-in generator modules: Basic, Random, Temporal, Text, and Person."
 ---
 
 `Forge` is the root object that every generator lambda receives as its first argument. When you write `f => f.Text.Guid()` or `f => f.Random.Pick(true, false)`, `f` is a `Forge` instance. It holds the underlying random number generator and locale, and it exposes five module properties that give you access to all of Forged's built-in data generators.

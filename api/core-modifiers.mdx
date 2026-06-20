@@ -1,5 +1,5 @@
 ---
-title: "Core Generator Modifiers on Generator<T>"
+title: "Generator<T> Core Modifiers: Fluent Pipeline Methods"
 sidebarTitle: "Core Modifiers"
 description: "Every Generator<T> exposes fluent modifier methods for conditional values, transformations, collection generation, and value memoization."
 ---
@@ -79,9 +79,11 @@ ProfileUrl = f => f.Internet.Url().Refine(s => new Uri(s)),
 
 ---
 
-### `.Cast<TOut>()`
+### `.Cast<TOut>()` `where TOut : T`
 
-Casts the generated value to `TOut`. Returns a `LiteralGenerator` wrapping the result of a single `Generate()` call. Returns `null` if the runtime cast is not possible.
+Casts the generated value to `TOut`, where `TOut` must be a subtype of `T` (enforced by the `where TOut : T` constraint). Returns a `LiteralGenerator` wrapping the result of a single `Generate()` call. Returns `null` if the runtime cast is not possible.
+
+**Type constraint** `where TOut : T` — `TOut` must derive from or implement `T`.
 
 **Returns** `IGenerator<TOut?>`
 

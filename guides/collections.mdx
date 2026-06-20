@@ -1,5 +1,5 @@
 ---
-title: "Generating Collections and Arrays with Forged"
+title: "Generating Collections, Arrays, and Dictionaries in Forged"
 sidebarTitle: "Collections"
 description: "Use Forged's built-in collection modifiers to generate arrays, lists, hash sets, and dictionaries of fake data from any generator."
 ---
@@ -82,16 +82,15 @@ Converts a `Generator<IEnumerable<T>>` to a `Generator<Dictionary<TKey, TValue>>
 ```csharp
 // Produce 5 unique uppercase keys, then map each to a random quantity
 Inventory = f => f.Text.Alpha(4).ToUpper()
-    .List(5)
-    .Refine(names => names.Distinct().ToList()) // deduplicate first
+    .Enumerable(5)                                        // must be IEnumerable<T>
     .AsDictionary(
-        name  => name,                                        // key selector
-        _     => f.Random.Number<int>(0, 100).Generate()     // value selector
+        name  => name,                                    // key selector
+        _     => f.Random.Number<int>(0, 100).Generate() // value selector
     ),
 ```
 
 <Note>
-  `.AsDictionary()` is an extension on `Generator<IEnumerable<T>>`. If you start from a `.List()` or `.Array()`, chain `.Refine(x => x.AsEnumerable())` or use `.Enumerable()` directly to reach the right type, or use the approach above where `.Refine()` returns a `List<T>` that implements `IEnumerable<T>`.
+  `.AsDictionary()` is an extension on `Generator<IEnumerable<T>>`. Always use `.Enumerable()` (not `.List()` or `.Array()`) as the upstream step — `.List()` and `.Array()` return `Generator<List<T>>` and `Generator<T[]>` respectively, and `Generator<List<T>>` is not the same type as `Generator<IEnumerable<T>>` even though `List<T>` implements `IEnumerable<T>`. If you need deduplication beforehand, chain `.Refine()` before calling `.AsDictionary()`.
 </Note>
 
 ### `.Shuffle()`
@@ -167,8 +166,7 @@ var faker = new BlogPostFaker
 
     // Dictionary of tag → vote count
     Votes   = f => f.Text.Alpha(4).ToUpper()
-                   .List(5)
-                   .Refine(names => names.Distinct().ToList())
+                   .Enumerable(5)
                    .AsDictionary(name => name, _ => f.Random.Number<int>(0, 1000).Generate()),
 };
 ```
